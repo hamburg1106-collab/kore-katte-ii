@@ -184,7 +184,7 @@ export const AssetsScreen = ({
           <div className="divide rows" style={{ gap: 9 }}>
             <input
               type="text"
-              placeholder="名前（例: ソニー生命 一時払変額）"
+              placeholder="名前（例: 定期預金、学資保険）"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
             />
