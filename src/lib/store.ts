@@ -239,6 +239,14 @@ export const saveProfile = (uid: string, patch: Partial<RootDoc>): Promise<void>
 export const saveAsset = (uid: string, id: string, balance: number): Promise<void> =>
   updateDoc(doc(db, 'shikin', uid, 'assets', id), { balance, updatedAt: Date.now() })
 
+export const addAsset = (
+  uid: string,
+  a: { name: string; kind: Asset['kind']; balance: number },
+): Promise<void> => setDoc(doc(sub(uid, 'assets')), { ...a, updatedAt: Date.now() })
+
+export const removeAsset = (uid: string, id: string): Promise<void> =>
+  deleteDoc(doc(db, 'shikin', uid, 'assets', id))
+
 export const saveEvent = (uid: string, id: string, patch: Partial<LifeEvent>): Promise<void> =>
   updateDoc(doc(db, 'shikin', uid, 'events', id), patch)
 

@@ -9,19 +9,33 @@ const KIND_COLOR: Record<Asset['kind'], string> = {
   insurance: '#d8d2c4',
 }
 
+const KIND_LABEL: Record<Asset['kind'], string> = {
+  cash: '現金・預金',
+  nisa: '投資',
+  insurance: '保険',
+}
+
 export const AssetsScreen = ({
   profile,
   assets,
   reconciles,
   onSave,
+  onAdd,
+  onRemove,
 }: {
   profile: Profile
   assets: Asset[]
   reconciles: Reconcile[]
   onSave: (id: string, balance: number) => Promise<void>
+  onAdd: (a: { name: string; kind: Asset['kind']; balance: number }) => Promise<void>
+  onRemove: (id: string) => Promise<void>
 }) => {
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newKind, setNewKind] = useState<Asset['kind']>('insurance')
+  const [newBalance, setNewBalance] = useState('')
   // Escapeで抜けたとき、閉じ際のonBlurで保存させないための札
   const cancelled = useRef(false)
 
@@ -56,6 +70,21 @@ export const AssetsScreen = ({
     setEditing(null)
   }
 
+  /** 資産を1件足す。完了は待たない（圏外だと返らない） */
+  const add = () => {
+    const name = newName.trim()
+    const cleaned = newBalance.replace(/[^\d-]/g, '')
+    if (!name) return
+    void onAdd({
+      name,
+      kind: newKind,
+      balance: cleaned === '' ? 0 : Number(cleaned),
+    }).catch((e) => console.error('[asset:add]', e))
+    setNewName('')
+    setNewBalance('')
+    setAdding(false)
+  }
+
   return (
     <div className="screen">
       <div className="head">
@@ -63,7 +92,12 @@ export const AssetsScreen = ({
       </div>
 
       <section className="card" style={{ borderRadius: 18, padding: '18px 20px' }}>
-        <div className="label">合計</div>
+        <div className="row">
+          <span className="label">合計</span>
+          <button type="button" className="ghost" onClick={() => setAdding((v) => !v)}>
+            {adding ? 'やめる' : '＋ 追加'}
+          </button>
+        </div>
         <div className="big">
           <span className="num" style={{ fontSize: 38 }}>
             {num(total)}
@@ -131,9 +165,52 @@ export const AssetsScreen = ({
                   {a.balance === 0 ? <span style={{ fontSize: 12, color: 'var(--terra)' }}>未登録</span> : num(a.balance)}
                 </button>
               )}
+              <button
+                type="button"
+                className="tap"
+                style={{ color: 'var(--muted)', fontSize: 16, minWidth: 32, margin: '-8px 0' }}
+                aria-label={`${a.name}を削除`}
+                onClick={() => {
+                  if (confirm(`「${a.name}」を資産から外しますか？`)) void onRemove(a.id)
+                }}
+              >
+                ×
+              </button>
             </div>
           ))}
         </div>
+
+        {adding && (
+          <div className="divide rows" style={{ gap: 9 }}>
+            <input
+              type="text"
+              placeholder="名前（例: ソニー生命 一時払変額）"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+            <div className="seg">
+              {(['cash', 'nisa', 'insurance'] as const).map((k) => (
+                <button key={k} type="button" aria-pressed={newKind === k} onClick={() => setNewKind(k)}>
+                  {KIND_LABEL[k]}
+                </button>
+              ))}
+            </div>
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="いまの金額"
+              value={newBalance}
+              onChange={(e) => setNewBalance(e.target.value)}
+            />
+            <button type="button" className="primary" style={{ minHeight: 44 }} disabled={!newName.trim()} onClick={add}>
+              追加する
+            </button>
+            <p className="small" style={{ margin: 0, fontSize: 11, lineHeight: 1.6 }}>
+              保険は「解約返戻金」を入れてください。運用実績（積立金額）は解約控除を引く前の数字で、
+              いま換金したら受け取れる額とは違います。
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="card" style={{ borderRadius: 18, padding: '18px 20px' }}>
