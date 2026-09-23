@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { METHODS, type CardRule } from '../config'
 import { fixedExpenseTotal, fixedTotal, fixedTransferTotal } from '../lib/calc'
-import { formatMonth, formatShortDay, thisMonth, toDateKey, yen } from '../lib/date'
-import type { FixedCost, Profile, Reconcile } from '../types'
+import { formatMonth, formatShortDay, formatUpdated, thisMonth, toDateKey, yen } from '../lib/date'
+import type { Asset, FixedCost, Profile, Reconcile } from '../types'
 
 const methodLabel = (id: string) => METHODS.find((m) => m.id === id)?.label ?? id
 
@@ -13,10 +13,12 @@ export const SettingsScreen = ({
   email,
   expectedBalance,
   reconciles,
+  assets,
   seedJson,
   onSaveProfile,
   onSaveFixed,
   onReconcile,
+  onSaveAsset,
   onImport,
   onLogout,
 }: {
@@ -26,15 +28,19 @@ export const SettingsScreen = ({
   email: string
   expectedBalance: number
   reconciles: Reconcile[]
+  assets: Asset[]
   seedJson: string
   onSaveProfile: (patch: Partial<Profile>) => Promise<void>
   onSaveFixed: (id: string, patch: Partial<FixedCost>) => Promise<void>
   onReconcile: (month: string, bankBalance: number) => Promise<void>
+  onSaveAsset: (id: string, balance: number) => Promise<void>
   onImport: (text: string) => Promise<string | null>
   onLogout: () => void
 }) => {
   const [openFixed, setOpenFixed] = useState(false)
-  const [balance, setBalance] = useState('')
+  // 棚卸しの下書き。資産IDごとに持つ。空のままの行は触らない
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [stockMsg, setStockMsg] = useState<string | null>(null)
   const [seedText, setSeedText] = useState('')
   const [seedMsg, setSeedMsg] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
@@ -65,16 +71,52 @@ export const SettingsScreen = ({
     }
   }
 
-  const runReconcile = () => {
-    const v = Number(balance.replace(/[^\d]/g, ''))
-    if (!v) return
-    if (alreadyDone && !confirm(`${formatMonth(month)}はすでに照合済みです。入れ直しますか？`)) return
-    // 完了は待たない（圏外だと返らない）。手元には入っている
-    void onReconcile(month, v).catch((e) => console.error('[reconcile]', e))
-    setBalance('')
+  /** 入力欄の文字列を金額に直す。空欄や数字でないものは null（＝触らない） */
+  const readDraft = (id: string): number | null => {
+    const raw = drafts[id]
+    if (raw === undefined) return null
+    const cleaned = raw.replace(/[^\d-]/g, '')
+    if (cleaned === '') return null
+    const v = Number(cleaned)
+    return Number.isFinite(v) ? v : null
   }
 
-  const diff = balance ? expectedBalance - Number(balance.replace(/[^\d]/g, '')) : 0
+  const cashAsset = assets.find((a) => a.kind === 'cash') ?? null
+  const cashDraft = cashAsset ? readDraft(cashAsset.id) : null
+  const diff = cashDraft === null ? 0 : expectedBalance - cashDraft
+  const filled = assets.filter((a) => readDraft(a.id) !== null).length
+
+  /**
+   * 棚卸しをまとめて保存する。
+   *
+   * 現金だけは残高照合として扱い、履歴（口座残高の推移）に1行残す。
+   * NISAと変額保険は評価額の上書きだけで、履歴は残さない。
+   * 空欄の行は触らない——全部を毎回入れ直させると続かないので、分かるものだけでいい。
+   */
+  const runStocktake = () => {
+    if (filled === 0) return
+    if (
+      cashDraft !== null &&
+      alreadyDone &&
+      !confirm(`${formatMonth(month)}はすでに照合済みです。入れ直しますか？`)
+    ) {
+      return
+    }
+
+    for (const a of assets) {
+      const v = readDraft(a.id)
+      if (v === null) continue
+      // 完了は待たない（圏外だと返らない）。手元には入っている
+      if (a.kind === 'cash') {
+        void onReconcile(month, v).catch((e) => console.error('[reconcile]', e))
+      } else {
+        void onSaveAsset(a.id, v).catch((e) => console.error('[asset:save]', e))
+      }
+    }
+
+    setStockMsg(`${filled}件を更新しました`)
+    setDrafts({})
+  }
 
   return (
     <div className="screen">
@@ -225,44 +267,83 @@ export const SettingsScreen = ({
       </section>
 
       <section className="card">
-        <div className="label">残高照合（{formatMonth(month)}）</div>
-        <p className="small" style={{ margin: '8px 0 10px', lineHeight: 1.6 }}>
-          実際の口座残高を入れて、アプリの残高をその値に合わせます。資産画面の「口座残高の推移」は
-          ここで入れた実額だけで作っています。<strong>記録は増えません。</strong>
+        <div className="label">棚卸し（{formatMonth(month)}）</div>
+        <p className="small" style={{ margin: '8px 0 12px', lineHeight: 1.6 }}>
+          月に1回、口座残高と評価額をまとめて入れます。<strong>分かるものだけでかまいません。</strong>
+          空欄の行は触りません。口座残高だけは履歴に残り、資産画面の「口座残高の推移」になります。
         </p>
+
         {alreadyDone && (
-          <p className="small" style={{ margin: '0 0 10px', lineHeight: 1.6, color: 'var(--green)' }}>
-            {formatShortDay(toDateKey(new Date(alreadyDone.postedAt)))} に照合済み（
+          <p className="small" style={{ margin: '0 0 12px', lineHeight: 1.6, color: 'var(--green)' }}>
+            {formatShortDay(toDateKey(new Date(alreadyDone.postedAt)))} に口座残高を照合済み（
             {yen(alreadyDone.bankBalance)}）。入れ直すと差し替わります。
           </p>
         )}
-        <div className="row">
-          <span style={{ fontSize: 13 }}>いま登録してある残高</span>
-          <span className="num" style={{ fontWeight: 700 }}>
-            {yen(expectedBalance)}
-          </span>
+
+        <div className="rows" style={{ gap: 12 }}>
+          {assets.map((a) => {
+            const seen = formatUpdated(a.updatedAt)
+            return (
+              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ flexGrow: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>{a.name}</span>
+                  <span
+                    style={{
+                      display: 'block',
+                      fontSize: 10,
+                      marginTop: 2,
+                      color: seen.stale ? 'var(--terra)' : 'var(--muted)',
+                    }}
+                  >
+                    {yen(a.balance)} ・ {seen.text}
+                  </span>
+                </span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder={String(a.balance)}
+                  value={drafts[a.id] ?? ''}
+                  style={{ width: 128, minHeight: 40, textAlign: 'right' }}
+                  onChange={(e) => {
+                    setStockMsg(null)
+                    setDrafts((d) => ({ ...d, [a.id]: e.target.value }))
+                  }}
+                />
+              </div>
+            )
+          })}
         </div>
-        <div className="rows" style={{ marginTop: 10, gap: 9 }}>
-          <input
-            type="number"
-            inputMode="numeric"
-            placeholder="実際の口座残高"
-            value={balance}
-            onChange={(e) => setBalance(e.target.value)}
-          />
-          {balance !== '' && (
-            <div className="row small">
-              <span>登録してある残高との差</span>
-              <span className="num" style={{ color: diff > 0 ? 'var(--terra)' : 'var(--green)' }}>
-                {diff > 0 ? '−' : '+'}
-                {yen(Math.abs(diff))}
-              </span>
-            </div>
-          )}
-          <button type="button" className="primary" style={{ minHeight: 44 }} disabled={!balance} onClick={runReconcile}>
-            {alreadyDone ? '照合し直す' : '照合する'}
-          </button>
-        </div>
+
+        {cashDraft !== null && (
+          <div className="row small divide">
+            <span>登録してある口座残高との差</span>
+            <span className="num" style={{ color: diff > 0 ? 'var(--terra)' : 'var(--green)' }}>
+              {diff > 0 ? '−' : '+'}
+              {yen(Math.abs(diff))}
+            </span>
+          </div>
+        )}
+
+        {stockMsg && (
+          <p className="small" style={{ margin: '10px 0 0', lineHeight: 1.6, color: 'var(--green)' }}>
+            {stockMsg}
+          </p>
+        )}
+
+        <button
+          type="button"
+          className="primary"
+          style={{ marginTop: 12, minHeight: 44 }}
+          disabled={filled === 0}
+          onClick={runStocktake}
+        >
+          {filled === 0 ? '棚卸しを保存' : `${filled}件を保存`}
+        </button>
+
+        <p className="small" style={{ margin: '10px 0 0', fontSize: 11, lineHeight: 1.6 }}>
+          楽天証券にも保険会社にも、個人が使える残高取得APIはありません。自動では入らないので、
+          ここで手を動かす前提の作りにしています。
+        </p>
       </section>
 
       <section className="card">
