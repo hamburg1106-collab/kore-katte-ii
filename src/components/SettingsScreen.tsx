@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { METHODS, type CardRule } from '../config'
 import { fixedExpenseTotal, fixedTotal, fixedTransferTotal } from '../lib/calc'
-import { formatMonth, num, thisMonth } from '../lib/date'
-import type { FixedCost, Profile } from '../types'
+import { formatMonth, formatShortDay, thisMonth, toDateKey, yen } from '../lib/date'
+import type { FixedCost, Profile, Reconcile } from '../types'
 
 const methodLabel = (id: string) => METHODS.find((m) => m.id === id)?.label ?? id
 
@@ -12,6 +12,7 @@ export const SettingsScreen = ({
   fixed,
   email,
   expectedBalance,
+  reconciles,
   seedJson,
   onSaveProfile,
   onSaveFixed,
@@ -24,6 +25,7 @@ export const SettingsScreen = ({
   fixed: FixedCost[]
   email: string
   expectedBalance: number
+  reconciles: Reconcile[]
   seedJson: string
   onSaveProfile: (patch: Partial<Profile>) => Promise<void>
   onSaveFixed: (id: string, patch: Partial<FixedCost>) => Promise<void>
@@ -33,13 +35,13 @@ export const SettingsScreen = ({
 }) => {
   const [openFixed, setOpenFixed] = useState(false)
   const [balance, setBalance] = useState('')
-  const [reconciling, setReconciling] = useState(false)
   const [seedText, setSeedText] = useState('')
   const [seedMsg, setSeedMsg] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
 
   const month = thisMonth()
   const empty = profile.takeHome === 0
+  const alreadyDone = reconciles.find((r) => r.id === month) ?? null
 
   const runImport = async () => {
     if (!seedText.trim() || importing) return
@@ -63,16 +65,13 @@ export const SettingsScreen = ({
     }
   }
 
-  const runReconcile = async () => {
+  const runReconcile = () => {
     const v = Number(balance.replace(/[^\d]/g, ''))
-    if (!v || reconciling) return
-    setReconciling(true)
-    try {
-      await onReconcile(month, v)
-      setBalance('')
-    } finally {
-      setReconciling(false)
-    }
+    if (!v) return
+    if (alreadyDone && !confirm(`${formatMonth(month)}はすでに照合済みです。入れ直しますか？`)) return
+    // 完了は待たない（圏外だと返らない）。手元には入っている
+    void onReconcile(month, v).catch((e) => console.error('[reconcile]', e))
+    setBalance('')
   }
 
   const diff = balance ? expectedBalance - Number(balance.replace(/[^\d]/g, '')) : 0
@@ -138,19 +137,19 @@ export const SettingsScreen = ({
           <div className="row">
             <span>支出</span>
             <span className="num" style={{ fontWeight: 700 }}>
-              {num(fixedExpenseTotal(fixed))}
+              {yen(fixedExpenseTotal(fixed))}
             </span>
           </div>
           <div className="row">
             <span>資金移動（貯蓄・投資）</span>
             <span className="num" style={{ fontWeight: 700, color: 'var(--green)' }}>
-              {num(fixedTransferTotal(fixed))}
+              {yen(fixedTransferTotal(fixed))}
             </span>
           </div>
           <div className="row divide">
             <span style={{ fontWeight: 700 }}>合計</span>
             <span className="num" style={{ fontWeight: 700 }}>
-              {num(fixedTotal(fixed))}
+              {yen(fixedTotal(fixed))}
             </span>
           </div>
         </div>
@@ -196,8 +195,8 @@ export const SettingsScreen = ({
           </div>
         </div>
         <p className="small" style={{ margin: '10px 0 0', fontSize: 11, lineHeight: 1.6 }}>
-          ビューカードは初回の請求明細で実際の日付を確認してください。違っていたら config.ts の
-          DEFAULT_CARD_RULES を直します。
+          ビューカードは初回の請求明細で実際の日付を確認してください。違っていたら直せるので
+          教えてください。
         </p>
       </section>
 
@@ -207,7 +206,7 @@ export const SettingsScreen = ({
           <div className="row">
             <span>生活防衛費</span>
             <span className="num" style={{ fontWeight: 700 }}>
-              {num(profile.emergencyFund)}
+              {yen(profile.emergencyFund)}
             </span>
           </div>
           <div className="row small">
@@ -228,13 +227,19 @@ export const SettingsScreen = ({
       <section className="card">
         <div className="label">残高照合（{formatMonth(month)}）</div>
         <p className="small" style={{ margin: '8px 0 10px', lineHeight: 1.6 }}>
-          実際の口座残高を入れると、記録との差を「使途不明」として1件足します。完璧に記録しなくても
-          残高が嘘にならないようにするためのものです。
+          実際の口座残高を入れて、アプリの残高をその値に合わせます。資産画面の「口座残高の推移」は
+          ここで入れた実額だけで作っています。<strong>記録は増えません。</strong>
         </p>
+        {alreadyDone && (
+          <p className="small" style={{ margin: '0 0 10px', lineHeight: 1.6, color: 'var(--green)' }}>
+            {formatShortDay(toDateKey(new Date(alreadyDone.postedAt)))} に照合済み（
+            {yen(alreadyDone.bankBalance)}）。入れ直すと差し替わります。
+          </p>
+        )}
         <div className="row">
-          <span style={{ fontSize: 13 }}>記録上の残高</span>
+          <span style={{ fontSize: 13 }}>いま登録してある残高</span>
           <span className="num" style={{ fontWeight: 700 }}>
-            {num(expectedBalance)}
+            {yen(expectedBalance)}
           </span>
         </div>
         <div className="rows" style={{ marginTop: 10, gap: 9 }}>
@@ -247,15 +252,15 @@ export const SettingsScreen = ({
           />
           {balance !== '' && (
             <div className="row small">
-              <span>差額（使途不明として計上）</span>
+              <span>登録してある残高との差</span>
               <span className="num" style={{ color: diff > 0 ? 'var(--terra)' : 'var(--green)' }}>
                 {diff > 0 ? '−' : '+'}
-                {num(Math.abs(diff))}
+                {yen(Math.abs(diff))}
               </span>
             </div>
           )}
-          <button type="button" className="primary" style={{ minHeight: 44 }} disabled={!balance || reconciling} onClick={runReconcile}>
-            {reconciling ? '照合中…' : '照合する'}
+          <button type="button" className="primary" style={{ minHeight: 44 }} disabled={!balance} onClick={runReconcile}>
+            {alreadyDone ? '照合し直す' : '照合する'}
           </button>
         </div>
       </section>

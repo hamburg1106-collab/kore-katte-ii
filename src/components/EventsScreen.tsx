@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { eventMonthly, isFunded } from '../lib/calc'
-import { formatMonth, monthDiff, num, thisMonth } from '../lib/date'
+import { formatMonth, monthDiff, num, thisMonth, yen } from '../lib/date'
 import type { BonusPlan, Confidence, LifeEvent } from '../types'
 
 const BADGE: Record<Confidence, { cls: string; label: string }> = {
@@ -34,16 +34,17 @@ export const EventsScreen = ({
   const [amount, setAmount] = useState('')
   const month = thisMonth()
 
-  const add = async () => {
+  // 完了は待たない（圏外だと返らない）。手元には入っている
+  const add = () => {
     if (!name.trim()) return
-    await onAdd({
+    void onAdd({
       name: name.trim(),
       targetMonth,
       amount: Number(amount.replace(/[^\d]/g, '')) || 0,
       confidence: 'likely',
       repeat: null,
       fundedFrom: 'bonus',
-    })
+    }).catch((e) => console.error('[event:add]', e))
     setName('')
     setTargetMonth('')
     setAmount('')
@@ -58,7 +59,7 @@ export const EventsScreen = ({
       </div>
 
       <section className="card dark" style={{ borderRadius: 18, padding: '18px 20px' }}>
-        <div className="label">今年の引当可能額（ボーナス）</div>
+        <div className="label">今年、先に取り分けられる額（ボーナス）</div>
         <div className="big">
           <span className="num" style={{ fontSize: 34 }}>
             {num(plan.annual)}
@@ -71,23 +72,23 @@ export const EventsScreen = ({
           {plan.allocations.map((a) => (
             <div key={a.name} className="row small">
               <span>{a.name}</span>
-              <span className="num">−{num(a.amount)}</span>
+              <span className="num">−{yen(a.amount)}</span>
             </div>
           ))}
           <div className="row small">
-            <span>NISA一括（調整弁）</span>
-            <span className="num">−{num(plan.nisa)}</span>
+            <span>NISA一括（あとから削る枠）</span>
+            <span className="num">−{yen(plan.nisa)}</span>
           </div>
           <div className="row divide" style={{ color: 'var(--gold)' }}>
             <span style={{ fontWeight: 700, fontSize: 12 }}>余剰</span>
             <span className="num" style={{ fontSize: 16, fontWeight: 700 }}>
-              {num(plan.surplus)}
+              {yen(plan.surplus)}
             </span>
           </div>
         </div>
         {plan.monthlyShortfall > 0 && (
           <p className="small" style={{ margin: '12px 0 0', lineHeight: 1.6 }}>
-            ボーナスだけでは足りません。月あたり {num(plan.monthlyShortfall)}円 を生活費から引いています。
+            ボーナスだけでは足りません。月あたり {yen(plan.monthlyShortfall)} を生活費から引いています。
           </p>
         )}
       </section>
@@ -134,22 +135,24 @@ export const EventsScreen = ({
                   borderStyle: funded ? 'solid' : 'dashed',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                {/* バッジも×も、見た目は小さいまま当たり判定だけ44px角にする（.tap） */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, margin: '-6px 0' }}>
                   <button
                     type="button"
-                    className={BADGE[e.confidence].cls}
-                    style={{ border: 'none' }}
+                    className="tap"
+                    aria-label={`${e.name}の確度（いま${BADGE[e.confidence].label}）を変える`}
                     onClick={() => onSave(e.id, { confidence: NEXT[e.confidence] })}
                   >
-                    {BADGE[e.confidence].label}
+                    <span className={BADGE[e.confidence].cls}>{BADGE[e.confidence].label}</span>
                   </button>
                   <span style={{ flexGrow: 1, fontSize: 14, fontWeight: 700 }}>{e.name}</span>
                   <button
                     type="button"
+                    className="tap"
+                    style={{ color: 'var(--muted)', fontSize: 16 }}
                     aria-label={`${e.name}を削除`}
-                    style={{ border: 'none', background: 'none', color: 'var(--muted)', fontSize: 16, padding: '4px 2px' }}
                     onClick={() => {
-                      if (confirm(`「${e.name}」を削除しますか？`)) onRemove(e.id)
+                      if (confirm(`「${e.name}」を削除しますか？`)) void onRemove(e.id)
                     }}
                   >
                     ×
@@ -161,20 +164,20 @@ export const EventsScreen = ({
                     {e.targetMonth ? `${formatMonth(e.targetMonth)}${left > 0 ? ` ・ あと${left}ヶ月` : ''}` : '時期未定'}
                   </span>
                   <span className="num" style={{ fontSize: 17, fontWeight: 700 }}>
-                    {e.amount > 0 ? num(e.amount) : '—'}
+                    {e.amount > 0 ? yen(e.amount) : '—'}
                   </span>
                 </div>
 
                 {funded ? (
                   <div className="row divide small">
-                    <span>月あたりの引当</span>
+                    <span>月あたり先に取り分ける額</span>
                     <span className="num" style={{ fontWeight: 700 }}>
-                      {num(eventMonthly(e, month))}円
+                      {yen(eventMonthly(e, month))}
                     </span>
                   </div>
                 ) : (
                   <p className="small" style={{ margin: '10px 0 0', fontSize: 11, lineHeight: 1.6 }}>
-                    引当なし。バッジを押すと確度が変わり、確定・見込みにすると引当が始まります。
+                    まだ取り分けていません。バッジを押して確定・見込みにすると、月あたりの額が出ます。
                   </p>
                 )}
               </div>

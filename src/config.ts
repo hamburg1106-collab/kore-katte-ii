@@ -8,9 +8,6 @@ export const TAB_KEY = 'katte:tab'
 /** もしもシナリオのON/OFF。端末ごとに覚える（保存データは変えない、見え方だけ） */
 export const SCENARIO_KEY = 'katte:scenario'
 
-/** 圏外でgetDocが固まるのを防ぐ待ち時間 */
-export const NETWORK_TIMEOUT_MS = 8000
-
 /**
  * ここには実額を一切書かない。
  *

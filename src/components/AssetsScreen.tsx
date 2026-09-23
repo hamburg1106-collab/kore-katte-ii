@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { cashBalance, emergencyShortfall, totalAssets } from '../lib/calc'
-import { formatMonth, num } from '../lib/date'
+import { formatMonth, num, yen } from '../lib/date'
 import type { Asset, Profile, Reconcile } from '../types'
 
 const KIND_COLOR: Record<Asset['kind'], string> = {
@@ -22,6 +22,8 @@ export const AssetsScreen = ({
 }) => {
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  // Escapeで抜けたとき、閉じ際のonBlurで保存させないための札
+  const cancelled = useRef(false)
 
   const total = totalAssets(assets)
   const cash = cashBalance(assets)
@@ -32,9 +34,25 @@ export const AssetsScreen = ({
   const history = [...reconciles].sort((a, b) => (a.id < b.id ? -1 : 1)).slice(-6)
   const maxBalance = Math.max(1, ...history.map((r) => r.bankBalance))
 
-  const commit = async (id: string) => {
-    const v = Number(draft.replace(/[^\d-]/g, ''))
-    if (!Number.isNaN(v)) await onSave(id, v)
+  /**
+   * 残高を確定する。
+   *
+   * 空欄のときは保存しない。Number('') は 0 になるので、全選択して消した状態で
+   * タブを押したりキーボードを閉じたりするだけで、口座残高が0円で上書きされる。
+   * 元の値は残らず、取り消す手段も無い。
+   */
+  const commit = (id: string) => {
+    if (cancelled.current) {
+      cancelled.current = false
+      setEditing(null)
+      return
+    }
+    const cleaned = draft.replace(/[^\d-]/g, '')
+    const v = Number(cleaned)
+    if (cleaned !== '' && Number.isFinite(v)) {
+      // 完了は待たない（圏外だと返らない）。手元には入っている
+      void onSave(id, v).catch((e) => console.error('[asset:save]', e))
+    }
     setEditing(null)
   }
 
@@ -82,6 +100,10 @@ export const AssetsScreen = ({
                   onBlur={() => commit(a.id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') commit(a.id)
+                    if (e.key === 'Escape') {
+                      cancelled.current = true
+                      setEditing(null)
+                    }
                   }}
                 />
               ) : (
@@ -113,8 +135,8 @@ export const AssetsScreen = ({
           <span style={{ width: `${pct}%`, height: 9 }} />
         </div>
         <div className="row small" style={{ marginTop: 9 }}>
-          <span className="num">{num(cash)}</span>
-          <span className="num">目標 {num(profile.emergencyFund)}</span>
+          <span className="num">{yen(cash)}</span>
+          <span className="num">目標 {yen(profile.emergencyFund)}</span>
         </div>
         <div className="note">
           {short > 0 ? (
@@ -126,7 +148,7 @@ export const AssetsScreen = ({
           )}
         </div>
         <p className="small" style={{ margin: '9px 0 0', fontSize: 10.5, lineHeight: 1.6 }}>
-          失職しても止められない支出 {num(profile.emergencyFund / 6)}円の6ヶ月分
+          失職しても止められない支出 {yen(profile.emergencyFund / 6)}の6ヶ月分
         </p>
       </section>
 

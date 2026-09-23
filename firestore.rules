@@ -26,6 +26,8 @@ service cloud.firestore {
     }
 
     // わが家のお財布（家計簿・2026-09-23に凍結）
+    // ↓ここはプレースホルダ。貼る前にコンソールの現行値をコピーして差し替えること。
+    //   このまま貼ると合言葉が変わり、凍結済みの過去データが読めなくなる。
     match /kakeibo/{code}/{document=**} {
       allow read, write: if code == 'ここに合言葉';
     }

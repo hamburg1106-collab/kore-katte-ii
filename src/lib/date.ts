@@ -55,11 +55,11 @@ export const formatDayJa = (dateKey: string): string => {
   return `${m}月${d}日`
 }
 
-/** 「277,620」。単位は呼び出し側で付ける（画面によって「円」の置き場所が違う） */
+/** 「277,620」。単位を別の要素で持つ場所（ホームの大きな数字など）だけこちら */
 export const num = (n: number): string => Math.round(n).toLocaleString('ja-JP')
 
-/** 「¥277,620」 */
-export const yen = (n: number): string => `¥${num(n)}`
+/** 「277,620円」。画面に出す金額は原則こちら。単位の付く画面と付かない画面を混ぜない */
+export const yen = (n: number): string => `${num(n)}円`
 
 /** from月からto月までを古い順に。固定費の未計上チェックに使う */
 export const monthsBetween = (from: string, to: string, limit = 60): string[] => {
