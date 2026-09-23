@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2f6f5e"/>
+      <stop offset="1" stop-color="#7fa99b"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14.08" fill="url(#g)"/>
+  <!-- メーターの弧。残量を示す -->
+  <path d="M16.64 39.68 A15.36 15.36 0 0 1 47.36 39.68"
+        fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="5.44" stroke-linecap="round"/>
+  <path d="M16.64 39.68 A15.36 15.36 0 0 1 32.00 24.32"
+        fill="none" stroke="#f2c879" stroke-width="5.44" stroke-linecap="round"/>
+  <!-- 針 -->
+  <circle cx="32.00" cy="39.68" r="2.88" fill="#ffffff"/>
+  <path d="M32.00 39.68 L40.32 30.08" stroke="#ffffff" stroke-width="2.24" stroke-linecap="round"/>
+</svg>

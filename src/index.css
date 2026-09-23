@@ -1,0 +1,424 @@
+/* 配色と字面はモック（claude.ai/artifact/1m9FYNaa13darfaCy5HYSw）に合わせている。
+   温かいアイボリー地に深緑。数字は Space Grotesk、和文は Zen Kaku Gothic New。 */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap');
+
+:root {
+  --ground: #f7f5f0;
+  --card: #ffffff;
+  --ink: #1c1b18;
+  --sub: #4a463e;
+  --muted: #6b675e;
+  --line: #e4e0d6;
+  --line-soft: #efece4;
+  --green: #2f6f5e;
+  --green-dark: #235445;
+  --green-light: #7fa99b;
+  --terra: #a8492e;
+  --gold: #f2c879;
+  --sand: #8a7b4f;
+  --chip: #f2efe7;
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: 'Zen Kaku Gothic New', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* iOSでの引っぱり更新を抑える。入力中に画面が動くと打ち間違える */
+  overscroll-behavior-y: none;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.num {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* ---- 骨組み ---- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--ground);
+}
+
+.screen {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding-bottom: 16px;
+  /* ホーム画面に追加したときに下端が隠れないように */
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+.head {
+  padding: 20px 20px 10px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.head h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+.head .sub {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* ---- 部品 ---- */
+
+.card {
+  margin: 0 16px 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+
+.card.dark {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.card.green {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+  border-radius: 20px;
+  padding: 22px 20px 20px;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.card.green .label,
+.card.dark .label {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.big {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.big .num {
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.big .unit {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.bar {
+  margin-top: 18px;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.22);
+  overflow: hidden;
+}
+
+.bar > span {
+  display: block;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--gold);
+  transition: width 0.25s ease;
+}
+
+.bar.light {
+  background: var(--line-soft);
+}
+
+.bar.light > span {
+  background: var(--green);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.row + .row {
+  margin-top: 7px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.divide {
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.card.green .divide,
+.card.dark .divide {
+  border-top-color: rgba(255, 255, 255, 0.2);
+}
+
+.small {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.card.green .small,
+.card.dark .small {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.chip {
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--chip);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  border-radius: 5px;
+  padding: 3px 7px;
+}
+
+.badge.fixed {
+  background: var(--green);
+}
+
+.badge.likely {
+  background: var(--sand);
+}
+
+.badge.considering {
+  background: var(--line);
+  color: var(--sub);
+}
+
+.note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--chip);
+  border-radius: 10px;
+  font-size: 11.5px;
+  color: var(--sub);
+  line-height: 1.6;
+}
+
+.minus {
+  color: var(--terra);
+}
+
+/* ---- ボタン ---- */
+
+.seg {
+  display: flex;
+  gap: 8px;
+}
+
+.seg > button {
+  flex-grow: 1;
+  min-height: 44px;
+  border-radius: 12px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--sub);
+  font-weight: 500;
+}
+
+.seg > button[aria-pressed='true'] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+  font-weight: 700;
+}
+
+.primary {
+  width: 100%;
+  min-height: 54px;
+  border: none;
+  border-radius: 14px;
+  background: var(--green);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.primary:disabled {
+  background: var(--line);
+  color: var(--muted);
+}
+
+.ghost {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 12px;
+}
+
+/* ---- 入力 ---- */
+
+input[type='text'],
+input[type='number'],
+input[type='month'] {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #dbd6ca;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 15px;
+  background: #fdfcf9;
+}
+
+.pad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pad > button {
+  min-height: 54px;
+  border: 1px solid #dbd6ca;
+  border-radius: 12px;
+  background: var(--card);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.pad > button.back {
+  background: var(--chip);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.methods {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.methods > button {
+  min-height: 44px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--sub);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.methods > button[aria-pressed='true'] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* ---- タブ ---- */
+
+.tabs {
+  display: flex;
+  border-top: 1px solid var(--line);
+  background: var(--card);
+  padding: 6px 4px calc(12px + env(safe-area-inset-bottom));
+}
+
+.tabs > button {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.tabs > button[aria-current='page'] {
+  color: var(--green);
+  font-weight: 700;
+}
+
+/* ---- ログイン ---- */
+
+.gate {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 28px;
+  text-align: center;
+}
+
+.gate h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.gate p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+}
