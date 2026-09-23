@@ -97,6 +97,29 @@ button {
   font-weight: 500;
 }
 
+/* 入力画面の日付。見た目は文字だけ、当たり判定は44px角。
+   透明な日付入力を重ねているので、タップするとOSの日付選択が出る */
+.date-pick {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 88px;
+  min-height: 44px;
+  margin: -14px 0;
+}
+
+.date-pick > input[type='date'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  opacity: 0;
+}
+
 /* ---- 部品 ---- */
 
 .card {
@@ -121,6 +144,19 @@ button {
   padding: 22px 20px 20px;
 }
 
+/* 予算オーバー。緑のままだと、ちょうど使い切ったのと3万円の使いすぎが同じ顔になる */
+.card.over {
+  background: var(--terra);
+  border-color: var(--terra);
+  color: #fff;
+  border-radius: 20px;
+  padding: 22px 20px 20px;
+}
+
+.card.over .bar > span {
+  background: #fff;
+}
+
 .label {
   font-size: 11px;
   font-weight: 700;
@@ -129,6 +165,7 @@ button {
 }
 
 .card.green .label,
+.card.over .label,
 .card.dark .label {
   color: rgba(255, 255, 255, 0.92);
 }
@@ -199,6 +236,7 @@ button {
 }
 
 .card.green .divide,
+.card.over .divide,
 .card.dark .divide {
   border-top-color: rgba(255, 255, 255, 0.2);
 }
@@ -209,6 +247,7 @@ button {
 }
 
 .card.green .small,
+.card.over .small,
 .card.dark .small {
   color: rgba(255, 255, 255, 0.92);
 }
@@ -254,6 +293,69 @@ button {
 
 .minus {
   color: var(--terra);
+}
+
+/* 見た目は小さいまま、当たり判定だけ44px角にする。中身の見え方は変えない */
+.tap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+/* 直近の記録。押すと訂正シートが出る */
+.txn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 11px 14px;
+  border-radius: 6px;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.txn-row:active {
+  background: var(--chip);
+}
+
+/* ---- 下から出るシート ---- */
+
+.sheet-back {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(28, 27, 24, 0.4);
+}
+
+.sheet {
+  width: 100%;
+  max-width: 480px;
+  max-height: 88%;
+  overflow-y: auto;
+  background: var(--ground);
+  border-radius: 20px 20px 0 0;
+  padding: 18px 18px calc(20px + env(safe-area-inset-bottom));
+}
+
+.danger {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--terra);
+  border-radius: 14px;
+  background: none;
+  color: var(--terra);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 /* ---- ボタン ---- */
@@ -314,7 +416,8 @@ button {
 
 input[type='text'],
 input[type='number'],
-input[type='month'] {
+input[type='month'],
+input[type='date'] {
   width: 100%;
   min-height: 44px;
   border: 1px solid #dbd6ca;

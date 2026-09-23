@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import type { Budget } from '../lib/calc'
 import { pendingCardTotal, cashBalance } from '../lib/calc'
-import { daysLeftInMonth, formatMonth, formatShortDay, num } from '../lib/date'
+import { daysLeftInMonth, formatMonth, formatShortDay, num, yen } from '../lib/date'
 import type { Asset, Txn } from '../types'
-import { METHODS } from '../config'
+import { METHODS, type CardRule } from '../config'
+import { TxnEditor } from './TxnEditor'
 
 const methodLabel = (id: string) => METHODS.find((m) => m.id === id)?.label ?? id
 
@@ -11,21 +13,33 @@ export const HomeScreen = ({
   budget,
   assets,
   txns,
+  cardRules,
   secondChild,
   scenarioLabel,
   onScenario,
+  onSaveTxn,
+  onRemoveTxn,
 }: {
   month: string
   budget: Budget
   assets: Asset[]
   txns: Txn[]
+  cardRules: Record<'rakuten' | 'view', CardRule>
   secondChild: boolean
   scenarioLabel: string
   onScenario: (v: boolean) => void
+  onSaveTxn: (id: string, patch: Partial<Txn>) => Promise<void>
+  onRemoveTxn: (id: string) => Promise<void>
 }) => {
+  const [editing, setEditing] = useState<string | null>(null)
+
   const pending = pendingCardTotal(txns)
   const bank = cashBalance(assets)
   const recent = txns.filter((t) => t.source !== 'fixed').slice(0, 4)
+  const editingTxn = txns.find((t) => t.id === editing) ?? null
+
+  // 使いすぎているかどうかが、このアプリの答えそのもの。色で分ける
+  const over = budget.remaining < 0
 
   return (
     <div className="screen">
@@ -45,19 +59,27 @@ export const HomeScreen = ({
         </section>
       )}
 
-      <section className="card green">
-        <div className="label">今月つかっていい額</div>
+      <section className={over ? 'card over' : 'card green'}>
+        <div className="label">{over ? '予算をこえています' : '今月つかっていい額'}</div>
         <div className="big">
-          <span className="num">{num(budget.remaining)}</span>
+          <span className="num">
+            {over && '−'}
+            {num(Math.abs(budget.remaining))}
+          </span>
           <span className="unit">円</span>
         </div>
         <div className="bar">
           <span style={{ width: `${budget.pct}%` }} />
         </div>
         <div className="row small" style={{ marginTop: 9 }}>
-          <span>使った {num(budget.used)}円</span>
-          <span>予算 {num(budget.budget)}円</span>
+          <span>使った {yen(budget.used)}</span>
+          <span>予算 {yen(budget.budget)}</span>
         </div>
+        {over && (
+          <p className="small" style={{ margin: '10px 0 0', lineHeight: 1.6 }}>
+            予算を {num(Math.abs(budget.remaining))}円 こえています。来月の繰越がその分減ります。
+          </p>
+        )}
       </section>
 
       <section style={{ margin: '0 16px 16px' }}>
@@ -83,17 +105,17 @@ export const HomeScreen = ({
         <div className="row">
           <span style={{ fontSize: 13, fontWeight: 700 }}>実質残高</span>
           <span className="num" style={{ fontSize: 25, fontWeight: 700 }}>
-            {num(bank - pending)}
+            {yen(bank - pending)}
           </span>
         </div>
         <div className="divide rows small">
           <div className="row">
             <span>口座残高</span>
-            <span className="num">{num(bank)}</span>
+            <span className="num">{yen(bank)}</span>
           </div>
           <div className="row">
             <span>カード未確定（楽天・ビュー）</span>
-            <span className="num minus">−{num(pending)}</span>
+            <span className="num minus">−{yen(pending)}</span>
           </div>
         </div>
       </section>
@@ -107,26 +129,45 @@ export const HomeScreen = ({
             まだ記録がありません。買ったら「入力」から金額を入れてください。
           </p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {recent.map((t) => (
-              <div
-                key={t.id}
-                className="card"
-                style={{ margin: 0, borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px' }}
-              >
-                <span className="num small" style={{ width: 38 }}>
-                  {formatShortDay(t.date)}
-                </span>
-                <span style={{ flexGrow: 1, fontSize: 13, fontWeight: 500 }}>{t.memo || '（メモなし）'}</span>
-                <span className="chip">{methodLabel(t.method)}</span>
-                <span className="num" style={{ fontSize: 14, fontWeight: 700 }}>
-                  {num(t.amount)}
-                </span>
-              </div>
-            ))}
-          </div>
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {recent.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="card txn-row"
+                  aria-label={`${t.memo || 'メモなし'} ${t.amount}円 を直す`}
+                  onClick={() => setEditing(t.id)}
+                >
+                  <span className="num small" style={{ width: 38, textAlign: 'left' }}>
+                    {formatShortDay(t.date)}
+                  </span>
+                  <span style={{ flexGrow: 1, fontSize: 13, fontWeight: 500, textAlign: 'left' }}>
+                    {t.memo || '（メモなし）'}
+                  </span>
+                  <span className="chip">{methodLabel(t.method)}</span>
+                  <span className="num" style={{ fontSize: 14, fontWeight: 700 }}>
+                    {yen(t.amount)}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="small" style={{ margin: '9px 0 0', lineHeight: 1.6 }}>
+              押すと金額・日付・支払い手段を直せます。消すこともできます。
+            </p>
+          </>
         )}
       </section>
+
+      {editingTxn && (
+        <TxnEditor
+          txn={editingTxn}
+          cardRules={cardRules}
+          onSave={onSaveTxn}
+          onRemove={onRemoveTxn}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   )
 }

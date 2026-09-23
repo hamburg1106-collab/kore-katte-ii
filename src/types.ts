@@ -70,7 +70,8 @@ export type Txn = {
   /**
    * manual    = 手入力
    * fixed     = 固定費の自動計上
-   * unknown   = 月末の残高照合で埋まった使途不明分
+   * unknown   = 残高照合が自動で足していた使途不明分。もう作らない（計算が
+   *             合っていなかったため）。過去ぶんが残っているので型には残す
    * household = 家計への追加拠出（11万で足りずに折半で足した分）
    */
   source: 'manual' | 'fixed' | 'unknown' | 'household'
@@ -119,7 +120,7 @@ export type Reconcile = {
   id: string
   /** 実際の口座残高 */
   bankBalance: number
-  /** 記録から計算した残高との差。使途不明として吸収した額 */
+  /** 照合する前に登録してあった残高との差。記録の抜けではなく、単なる増減 */
   diff: number
   postedAt: number
 }

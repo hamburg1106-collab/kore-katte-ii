@@ -8,13 +8,7 @@ import { SettingsScreen } from './components/SettingsScreen'
 import { TabBar, type Tab } from './components/TabBar'
 import { APP_NAME, SCENARIO_KEY, TAB_KEY } from './config'
 import { login, logout, watchUser } from './lib/auth'
-import {
-  buildBonusPlan,
-  carryOverAt,
-  cashBalance,
-  monthlyBudget,
-  pendingCardTotal,
-} from './lib/calc'
+import { buildBonusPlan, carryOverAt, cashBalance, monthlyBudget } from './lib/calc'
 import { thisMonth } from './lib/date'
 import { buildSeed, parseSeed } from './lib/seed'
 import {
@@ -24,10 +18,12 @@ import {
   postFixedCosts,
   reconcile,
   removeEvent,
+  removeTxn,
   saveAsset,
   saveEvent,
   saveFixed,
   saveProfile,
+  updateTxn,
   useData,
 } from './lib/store'
 
@@ -53,11 +49,23 @@ const App = () => {
   const data = useData(uid)
   const month = thisMonth()
 
-  // 起動時に未計上の月があれば固定費を入れる。二重計上は months/<YYYY-MM> の印で防ぐ
+  // 起動時に未計上の月があれば固定費を入れる。二重計上は months/<YYYY-MM> の印で防ぐ。
+  // months と txns が届く前に動くと印が見えず丸ごと二重計上するので、両方待つ
   useEffect(() => {
-    if (!uid || data.loading || data.fixed.length === 0) return
-    void postFixedCosts(uid, data.profile, data.fixed, data.months, data.cardRules)
-  }, [uid, data.loading, data.fixed, data.months, data.profile, data.cardRules])
+    if (!uid || data.loading || !data.monthsLoaded || !data.txnsLoaded) return
+    if (data.fixed.length === 0) return
+    void postFixedCosts(uid, data.profile, data.fixed, data.months, data.txns, data.cardRules)
+  }, [
+    uid,
+    data.loading,
+    data.monthsLoaded,
+    data.txnsLoaded,
+    data.fixed,
+    data.months,
+    data.txns,
+    data.profile,
+    data.cardRules,
+  ])
 
   const plan = useMemo(
     () => buildBonusPlan(data.profile, data.events, data.assets, month),
@@ -122,8 +130,9 @@ const App = () => {
   }
 
   const cashAsset = data.assets.find((a) => a.kind === 'cash')
-  // 記録から見た口座残高。カード未確定分はまだ出ていないので足し戻す
-  const expectedBalance = cashBalance(data.assets) - pendingCardTotal(data.txns)
+  // 照合の比較相手。アプリに登録してある口座残高そのもの。
+  // カード未確定分を引くと口座残高ではない数字になるので引かない
+  const expectedBalance = cashBalance(data.assets)
 
   return (
     <div className="app">
@@ -133,9 +142,12 @@ const App = () => {
           budget={budget}
           assets={data.assets}
           txns={data.txns}
+          cardRules={data.cardRules}
           secondChild={secondChild}
           scenarioLabel={data.profile.scenarioLabel}
           onScenario={setSecondChild}
+          onSaveTxn={(id, patch) => updateTxn(user.uid, id, patch)}
+          onRemoveTxn={(id) => removeTxn(user.uid, id)}
         />
       )}
 
@@ -169,11 +181,13 @@ const App = () => {
           fixed={data.fixed}
           email={user.email ?? ''}
           expectedBalance={expectedBalance}
+          reconciles={data.reconciles}
           seedJson={buildSeed(data.profile, data.fixed, data.events, data.assets)}
           onImport={async (text) => {
             const r = parseSeed(text)
             if (!r.ok) return r.error
-            await importSeed(user.uid, r.seed)
+            // 書き込みの完了は待たない。圏外だと永久に返らず「取り込み中…」で固まる
+            void importSeed(user.uid, r.seed).catch((e) => console.error('[import]', e))
             return null
           }}
           onSaveProfile={(patch) => saveProfile(user.uid, patch)}

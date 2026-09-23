@@ -35,6 +35,15 @@ export type Data = {
   assets: Asset[]
   months: MonthState[]
   reconciles: Reconcile[]
+  /**
+   * txns と months が1回でも届いたか。
+   *
+   * loading はルート文書の購読で落ちるので、これだけを見て固定費の自動計上を
+   * 始めると、months が空配列のまま（＝まだ届いていない）条件を満たしてしまい、
+   * 機種変更や再インストールの直後に過去ぶんを丸ごと二重計上する。
+   */
+  txnsLoaded: boolean
+  monthsLoaded: boolean
 }
 
 const EMPTY: Data = {
@@ -47,6 +56,8 @@ const EMPTY: Data = {
   assets: [],
   months: [],
   reconciles: [],
+  txnsLoaded: false,
+  monthsLoaded: false,
 }
 
 /**
@@ -96,9 +107,13 @@ export const postFixedCosts = async (
   profile: Profile,
   fixed: FixedCost[],
   months: MonthState[],
+  txns: Txn[],
   cardRules: Record<'rakuten' | 'view', CardRule>,
 ): Promise<void> => {
   const done = new Set(months.filter((m) => m.fixedPosted).map((m) => m.id))
+  // 保険。印が消えていても、その月に計上済みの記録があれば手を出さない
+  for (const t of txns) if (t.source === 'fixed') done.add(t.date.slice(0, 7))
+
   const targets = monthsBetween(profile.startMonth, thisMonth()).filter((m) => !done.has(m))
   if (targets.length === 0) return
 
@@ -143,33 +158,55 @@ export const useData = (uid: string | null): Data => {
       if (alive) setState((prev) => ({ ...prev, ...p }))
     }
 
-    const unsubs: (() => void)[] = []
+    const oops = (where: string) => (e: unknown) => console.error(`[store] ${where}`, e)
 
-    ensureSeed(uid)
-      .then(() => {
-        if (!alive) return
-        unsubs.push(
-          onSnapshot(root(uid), (snap) => {
-            const d = snap.data() as RootDoc | undefined
-            if (!d) return
-            const { cardRules, ...profile } = d
-            patch({
-              profile: { ...DEFAULT_PROFILE, ...profile },
-              cardRules: cardRules ?? DEFAULT_CARD_RULES,
-              loading: false,
-            })
-          }),
-          onSnapshot(sub(uid, 'fixed'), (s) => patch({ fixed: withIds<FixedCost>(s.docs) })),
-          onSnapshot(sub(uid, 'txns'), (s) => patch({ txns: withIds<Txn>(s.docs) })),
-          onSnapshot(sub(uid, 'events'), (s) => patch({ events: withIds<LifeEvent>(s.docs) })),
-          onSnapshot(sub(uid, 'assets'), (s) => patch({ assets: withIds<Asset>(s.docs) })),
-          onSnapshot(sub(uid, 'months'), (s) => patch({ months: withIds<MonthState>(s.docs) })),
-          onSnapshot(sub(uid, 'reconcile'), (s) =>
-            patch({ reconciles: withIds<Reconcile>(s.docs) }),
-          ),
-        )
-      })
-      .catch(() => patch({ loading: false }))
+    /**
+     * 購読を先に張る。ensureSeed の完了を待ってから張ると、電波が悪くて
+     * getDoc が失敗したときに購読が1つも立たず、手元（IndexedDB）に残高も記録も
+     * あるのに画面が全部0になる。onSnapshot はキャッシュから即座に返すので、
+     * 圏外でも前回の内容が出る。
+     */
+    const unsubs: (() => void)[] = [
+      onSnapshot(
+        root(uid),
+        (snap) => {
+          const d = snap.data() as RootDoc | undefined
+          // 初回起動でまだ文書が無いときも、読み込み中のままにはしない
+          if (!d) {
+            patch({ loading: false })
+            return
+          }
+          const { cardRules, ...profile } = d
+          patch({
+            profile: { ...DEFAULT_PROFILE, ...profile },
+            cardRules: cardRules ?? DEFAULT_CARD_RULES,
+            loading: false,
+          })
+        },
+        oops('root'),
+      ),
+      onSnapshot(sub(uid, 'fixed'), (s) => patch({ fixed: withIds<FixedCost>(s.docs) }), oops('fixed')),
+      onSnapshot(
+        sub(uid, 'txns'),
+        (s) => patch({ txns: withIds<Txn>(s.docs), txnsLoaded: true }),
+        oops('txns'),
+      ),
+      onSnapshot(sub(uid, 'events'), (s) => patch({ events: withIds<LifeEvent>(s.docs) }), oops('events')),
+      onSnapshot(sub(uid, 'assets'), (s) => patch({ assets: withIds<Asset>(s.docs) }), oops('assets')),
+      onSnapshot(
+        sub(uid, 'months'),
+        (s) => patch({ months: withIds<MonthState>(s.docs), monthsLoaded: true }),
+        oops('months'),
+      ),
+      onSnapshot(
+        sub(uid, 'reconcile'),
+        (s) => patch({ reconciles: withIds<Reconcile>(s.docs) }),
+        oops('reconcile'),
+      ),
+    ]
+
+    // 空のルート文書づくりは裏で走らせる。失敗しても画面は動く
+    ensureSeed(uid).catch(oops('ensureSeed'))
 
     return () => {
       alive = false
@@ -189,6 +226,9 @@ export const useData = (uid: string | null): Data => {
 
 export const addTxn = (uid: string, t: Omit<Txn, 'id'>): Promise<void> =>
   setDoc(doc(sub(uid, 'txns')), t)
+
+export const updateTxn = (uid: string, id: string, patch: Partial<Txn>): Promise<void> =>
+  updateDoc(doc(db, 'shikin', uid, 'txns', id), patch)
 
 export const removeTxn = (uid: string, id: string): Promise<void> =>
   deleteDoc(doc(db, 'shikin', uid, 'txns', id))
@@ -214,9 +254,16 @@ export const saveFixed = (uid: string, id: string, patch: Partial<FixedCost>): P
 /**
  * 月末の残高照合。
  *
- * 実際の口座残高を入れると、記録との差額を「使途不明」として1件足す。
- * 完璧に記録しなくても残高が嘘にならないようにするための仕組みで、
- * PayPayのオートチャージ誤差もここで吸収される。
+ * 実際の口座残高を入れて、登録してある残高をその値に更新し、履歴に1行残す。
+ *
+ * 以前はここで差額を「使途不明」の支出として自動計上していたが、やめた。
+ * 比べていた `expected` は「前回照合したときの残高」であって記録から計算した
+ * 残高ではなく、差額の中身は給料も今月の支出もカード未確定分も混ざった
+ * 寄せ集めだった。正しい期待残高を出すには「前回照合日以降に payoutDate が
+ * 到来した記録」と「その間の給料」を積む必要があり、今のデータでは出せない。
+ * 嘘の数字を自動で書き込むより、書かない方が安全。
+ *
+ * 同じ月に何度押しても、残高の上書きと履歴の差し替えだけなので増殖しない。
  */
 export const reconcile = async (
   uid: string,
@@ -225,24 +272,12 @@ export const reconcile = async (
   expected: number,
   cashAssetId: string,
 ): Promise<void> => {
-  const diff = expected - bankBalance
   const batch = writeBatch(db)
 
-  if (Math.abs(diff) >= 1) {
-    batch.set(doc(sub(uid, 'txns')), {
-      date: `${month}-28`,
-      amount: diff,
-      memo: '使途不明（残高照合）',
-      method: 'bank',
-      payoutDate: `${month}-28`,
-      kind: 'expense',
-      source: 'unknown',
-      createdAt: Date.now(),
-    })
-  }
   batch.set(doc(db, 'shikin', uid, 'reconcile', month), {
     bankBalance,
-    diff,
+    // 登録してあった残高との差。何に使ったかまでは分からない
+    diff: expected - bankBalance,
     postedAt: Date.now(),
   })
   batch.update(doc(db, 'shikin', uid, 'assets', cashAssetId), {

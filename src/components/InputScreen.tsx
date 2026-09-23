@@ -19,13 +19,14 @@ export const InputScreen = ({
   cardRules: Record<'rakuten' | 'view', CardRule>
   onSave: (t: Omit<Txn, 'id'>) => Promise<void>
 }) => {
+  const today = todayKey()
   const [digits, setDigits] = useState('')
   const [memo, setMemo] = useState('')
   const [method, setMethod] = useState<Method>('rakuten')
-  const [saving, setSaving] = useState(false)
+  const [date, setDate] = useState(today)
   const [done, setDone] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const date = todayKey()
   const amount = digits === '' ? 0 : parseInt(digits, 10)
 
   const tap = (key: string) => {
@@ -37,34 +38,51 @@ export const InputScreen = ({
     setDigits((d) => (d.length >= 8 ? d : (d + key).replace(/^0+(?=\d)/, '')))
   }
 
-  const save = async () => {
-    if (amount <= 0 || saving) return
-    setSaving(true)
-    try {
-      await onSave({
-        date,
-        amount,
-        memo: memo.trim(),
-        method,
-        payoutDate: payoutDateFor(method, date, cardRules),
-        // 手入力は消費として扱う。投資や貯蓄への振替は設定の固定費で持つ
-        kind: 'expense',
-        source: 'manual',
-        createdAt: Date.now(),
-      })
-      setDigits('')
-      setMemo('')
-      setDone(true)
-    } finally {
-      setSaving(false)
-    }
+  /**
+   * 保存。完了を待たない。
+   *
+   * Firestoreの書き込みはサーバーが受け取るまで解決しないので、圏外で await すると
+   * 「保存中…」から戻らず、次の記録も入れられなくなる。実際にはその場で手元
+   * （IndexedDB）に入っていて、電波が戻れば自動で送られる。だから画面は先に進める。
+   */
+  const save = () => {
+    if (amount <= 0 || !date) return
+    setError(null)
+    void onSave({
+      date,
+      amount,
+      memo: memo.trim(),
+      method,
+      payoutDate: payoutDateFor(method, date, cardRules),
+      // 手入力は消費として扱う。投資や貯蓄への振替は設定の固定費で持つ
+      kind: 'expense',
+      source: 'manual',
+      createdAt: Date.now(),
+    }).catch((e) => {
+      console.error('[txn:add]', e)
+      setError('保存できませんでした。もう一度押してください。')
+    })
+    setDigits('')
+    setMemo('')
+    setDone(true)
   }
 
   return (
     <div className="screen" style={{ display: 'flex', flexDirection: 'column' }}>
       <div className="head">
         <h1>記録する</h1>
-        <span className="sub">{date.replace(/-/g, '/')}</span>
+        {/* 入れ忘れた前日ぶんも入れられるように、日付は変えられる */}
+        <label className="date-pick">
+          <span className="sub" style={{ color: date === today ? undefined : 'var(--terra)' }}>
+            {date === today ? '今日' : date.replace(/-/g, '/')}
+          </span>
+          <input
+            type="date"
+            value={date}
+            aria-label="使った日"
+            onChange={(e) => setDate(e.target.value || today)}
+          />
+        </label>
       </div>
 
       <section className="card" style={{ borderRadius: 18, padding: '18px 20px 16px' }}>
@@ -144,11 +162,16 @@ export const InputScreen = ({
           type="button"
           className="primary"
           style={{ marginTop: 10 }}
-          disabled={amount <= 0 || saving}
+          disabled={amount <= 0}
           onClick={save}
         >
-          {saving ? '保存中…' : done ? '保存しました' : '保存する'}
+          {done ? '保存しました' : '保存する'}
         </button>
+        {error && (
+          <p className="small" style={{ margin: '8px 0 0', color: 'var(--terra)', lineHeight: 1.6 }}>
+            {error}
+          </p>
+        )}
       </section>
     </div>
   )
