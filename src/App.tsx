@@ -12,11 +12,13 @@ import { buildBonusPlan, carryOverAt, cashBalance, monthlyBudget } from './lib/c
 import { thisMonth } from './lib/date'
 import { buildSeed, parseSeed } from './lib/seed'
 import {
+  addAsset,
   addEvent,
   addTxn,
   importSeed,
   postFixedCosts,
   reconcile,
+  removeAsset,
   removeEvent,
   removeTxn,
   saveAsset,
@@ -161,6 +163,8 @@ const App = () => {
           assets={data.assets}
           reconciles={data.reconciles}
           onSave={(id, balance) => saveAsset(user.uid, id, balance)}
+          onAdd={(a) => addAsset(user.uid, a)}
+          onRemove={(id) => removeAsset(user.uid, id)}
         />
       )}
 
