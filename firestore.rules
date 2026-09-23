@@ -1,0 +1,44 @@
+rules_version = '2';
+
+// Firebaseコンソール（ouchi-no-kondate → Firestore → ルール）に貼るもの。
+//
+// このプロジェクトは複数のアプリで共用している。既存のアプリのコレクションを
+// 消すと他のアプリが止まるので、貼る前にコンソール側の中身と見比べること。
+// 下の一覧は 2026-09-23 時点で他アプリが使っているコレクション。
+//
+// 「これ買っていい」は shikin/{uid}/... に入れる。
+// 合言葉方式ではなくGoogleログインで守る。理由は、共有相手がいないのにURLで守っても
+// 利点がゼロでリスクだけ残るから。資産額と収入を扱うので、パスを知られたら丸見えになる
+// 方式は採らない。
+//
+// なお、Googleアカウントを持つ誰でもログインはできるが、入れるのは自分のuid配下だけ。
+// 他人の資産は見えないし、こちらのデータにも触れない。
+// もっと締めたければ、初回ログイン後にコンソールでuidを確認して
+//   allow read, write: if request.auth.uid == 'ここに自分のuid';
+// に置き換える（uidは秘密情報ではないが、このファイルは公開リポジトリに載るので
+// 書くなら最小限の情報だけにする）。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // これ買っていい（資金管理）
+    match /shikin/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // わが家のお財布（家計簿・2026-09-23に凍結）
+    match /kakeibo/{code}/{document=**} {
+      allow read, write: if code == 'ここに合言葉';
+    }
+
+    // 献立提案アプリ
+    match /inventory/{doc} { allow read, write: if true; }
+    match /recipes/{doc}   { allow read, write: if true; }
+    match /history/{doc}   { allow read, write: if true; }
+
+    // これ食っていい
+    match /daily/{doc}       { allow read, write: if true; }
+    match /healthUsers/{doc=**} { allow read, write: if true; }
+    match /meals/{doc}       { allow read, write: if true; }
+    match /profile/{doc}     { allow read, write: if true; }
+  }
+}
