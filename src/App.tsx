@@ -182,6 +182,7 @@ const App = () => {
           email={user.email ?? ''}
           expectedBalance={expectedBalance}
           reconciles={data.reconciles}
+          assets={data.assets}
           seedJson={buildSeed(data.profile, data.fixed, data.events, data.assets)}
           onImport={async (text) => {
             const r = parseSeed(text)
@@ -192,6 +193,7 @@ const App = () => {
           }}
           onSaveProfile={(patch) => saveProfile(user.uid, patch)}
           onSaveFixed={(id, patch) => saveFixed(user.uid, id, patch)}
+          onSaveAsset={(id, balance) => saveAsset(user.uid, id, balance)}
           onReconcile={(m, bank) =>
             cashAsset
               ? reconcile(user.uid, m, bank, expectedBalance, cashAsset.id)

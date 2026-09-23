@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { cashBalance, emergencyShortfall, totalAssets } from '../lib/calc'
-import { formatMonth, num, yen } from '../lib/date'
+import { formatMonth, formatUpdated, num, yen } from '../lib/date'
 import type { Asset, Profile, Reconcile } from '../types'
 
 const KIND_COLOR: Record<Asset['kind'], string> = {
@@ -88,7 +88,19 @@ export const AssetsScreen = ({
           {assets.map((a) => (
             <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 9, height: 9, borderRadius: 3, background: KIND_COLOR[a.kind] }} />
-              <span style={{ flexGrow: 1, fontSize: 13, fontWeight: 500 }}>{a.name}</span>
+              <span style={{ flexGrow: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>{a.name}</span>
+                <span
+                  style={{
+                    display: 'block',
+                    fontSize: 10,
+                    marginTop: 2,
+                    color: formatUpdated(a.updatedAt).stale ? 'var(--terra)' : 'var(--muted)',
+                  }}
+                >
+                  {formatUpdated(a.updatedAt).text}
+                </span>
+              </span>
               {editing === a.id ? (
                 <input
                   type="number"

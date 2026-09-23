@@ -37,6 +37,23 @@ export const daysLeftInMonth = (): number => {
   return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate() + 1
 }
 
+/**
+ * そのタイムスタンプから何日経ったか。未設定なら Infinity。
+ *
+ * 資産の鮮度を出すのに使う。現金は残高照合で自動的に新しくなるが、
+ * NISAと変額保険は手で入れないと古いままなので、古さを画面に出して気づけるようにする。
+ */
+export const daysSince = (ts: number | undefined): number =>
+  ts ? Math.floor((Date.now() - ts) / 86_400_000) : Number.POSITIVE_INFINITY
+
+/** 「9/23に更新」「未更新」。45日を超えたものは stale にする（棚卸しは月1回のため） */
+export const formatUpdated = (ts: number | undefined): { text: string; stale: boolean } => {
+  const days = daysSince(ts)
+  if (!Number.isFinite(days)) return { text: '未更新', stale: true }
+  if (days <= 0) return { text: '今日 更新', stale: false }
+  return { text: `${formatShortDay(toDateKey(new Date(ts as number)))} 更新・${days}日前`, stale: days > 45 }
+}
+
 /** 「2026年10月」 */
 export const formatMonth = (month: string): string => {
   const [y, m] = month.split('-')
