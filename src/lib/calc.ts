@@ -98,7 +98,6 @@ export type Budget = {
     fixed: number
     transfer: number
     monthlyAllocation: number
-    scenario: number
     carryOver: number
   }
 }
@@ -106,11 +105,15 @@ export type Budget = {
 /**
  * 今月つかっていい額。
  *
- *   予算 = 手取り月収 − 固定費 − 月次引当 − シナリオ引当 + 前月繰越
+ *   予算 = 手取り月収 − 固定費 − 月次引当 + 前月繰越
  *   つかっていい額 = 予算 − 今月の実績
  *
  * 固定費は予算から先に引いてあるので、自動計上ぶん（source==='fixed'）を
  * 実績に数えると二重に引くことになる。除外する。
+ *
+ * 以前は「もしもシナリオ」で月の予算から一律に差し引く仕組みがあったが、やめた。
+ * ライフイベントはボーナス→NISAの順で吸収するという原則を素通りして、
+ * 実際より怖い数字を出していたため。将来の支出はすべてライフイベントとして持つ。
  */
 export const monthlyBudget = (
   profile: Profile,
@@ -120,7 +123,6 @@ export const monthlyBudget = (
   month: string,
   carryOver: number,
   plan: BonusPlan,
-  secondChild: boolean,
 ): Budget => {
   // 固定費は計上済みの実額を優先する。毎月金額が変わるもの（variable）があるため、
   // テンプレの金額で計算すると月合計が実態からずれる。
@@ -137,9 +139,8 @@ export const monthlyBudget = (
     .reduce((sum, e) => sum + eventMonthly(e, month), 0)
 
   const monthlyAllocation = Math.round(monthlyEvents + plan.monthlyShortfall)
-  const scenario = secondChild ? profile.secondChildMonthly : 0
 
-  const budget = profile.takeHome - expense - transfer - monthlyAllocation - scenario + carryOver
+  const budget = profile.takeHome - expense - transfer - monthlyAllocation + carryOver
 
   const used = txns
     .filter((t) => monthOf(t.date) === month && t.source !== 'fixed')
@@ -158,7 +159,6 @@ export const monthlyBudget = (
       fixed: expense,
       transfer,
       monthlyAllocation,
-      scenario,
       carryOver,
     },
   }
@@ -181,8 +181,7 @@ export const carryOverAt = (
   let carry = 0
   let cur = profile.startMonth
   while (cur < month) {
-    // 過去の月はシナリオ抜き（実績で閉じる）
-    carry = monthlyBudget(profile, fixed, events, txns, cur, carry, plan, false).remaining
+    carry = monthlyBudget(profile, fixed, events, txns, cur, carry, plan).remaining
     const [y, m] = cur.split('-').map(Number)
     const next = new Date(y, m, 1)
     cur = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`

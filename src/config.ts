@@ -5,9 +5,6 @@ export const APP_NAME = 'これ買っていい'
 /** 最後に開いていたタブ。次に開いたとき同じ画面に戻す */
 export const TAB_KEY = 'katte:tab'
 
-/** もしもシナリオのON/OFF。端末ごとに覚える（保存データは変えない、見え方だけ） */
-export const SCENARIO_KEY = 'katte:scenario'
-
 /**
  * ここには実額を一切書かない。
  *
@@ -61,8 +58,6 @@ export const DEFAULT_PROFILE: Profile = {
   bonusDay: 10,
   emergencyFund: 0,
   annualNisaLump: 0,
-  secondChildMonthly: 0,
-  scenarioLabel: 'もしも',
   startMonth: START_MONTH,
 }
 

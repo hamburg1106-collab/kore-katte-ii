@@ -36,10 +36,6 @@ export type Profile = {
   emergencyFund: number
   /** ボーナスから積立投資へ入れる年額。引当が優先で、足りなければここが削られる */
   annualNisaLump: number
-  /** もしもシナリオでの月あたり追加引当 */
-  secondChildMonthly: number
-  /** もしもシナリオの表示名。中身は個人的な話になるのでコードに書かず、取り込みで入れる */
-  scenarioLabel: string
   /** 繰り越しの起点（YYYY-MM） */
   startMonth: string
 }

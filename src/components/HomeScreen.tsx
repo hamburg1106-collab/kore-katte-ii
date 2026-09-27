@@ -14,9 +14,6 @@ export const HomeScreen = ({
   assets,
   txns,
   cardRules,
-  secondChild,
-  scenarioLabel,
-  onScenario,
   onSaveTxn,
   onRemoveTxn,
 }: {
@@ -25,9 +22,6 @@ export const HomeScreen = ({
   assets: Asset[]
   txns: Txn[]
   cardRules: Record<'rakuten' | 'view', CardRule>
-  secondChild: boolean
-  scenarioLabel: string
-  onScenario: (v: boolean) => void
   onSaveTxn: (id: string, patch: Partial<Txn>) => Promise<void>
   onRemoveTxn: (id: string) => Promise<void>
 }) => {
@@ -80,25 +74,6 @@ export const HomeScreen = ({
             予算を {num(Math.abs(budget.remaining))}円 こえています。来月の繰越がその分減ります。
           </p>
         )}
-      </section>
-
-      <section style={{ margin: '0 16px 16px' }}>
-        <div className="label" style={{ marginBottom: 8 }}>
-          シナリオ
-        </div>
-        <div className="seg">
-          <button type="button" aria-pressed={!secondChild} onClick={() => onScenario(false)}>
-            いまのまま
-          </button>
-          <button type="button" aria-pressed={secondChild} onClick={() => onScenario(true)}>
-            {scenarioLabel}
-          </button>
-        </div>
-        <p className="small" style={{ margin: '8px 0 0', lineHeight: 1.5 }}>
-          {secondChild
-            ? '追加の引当ぶん、自由に使える額が減ったところ。'
-            : '今の実額。ボーナスの余剰は「予定」で見られる。'}
-        </p>
       </section>
 
       <section className="card">

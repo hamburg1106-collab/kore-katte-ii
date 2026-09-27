@@ -41,7 +41,8 @@ export const EventsScreen = ({
       name: name.trim(),
       targetMonth,
       amount: Number(amount.replace(/[^\d]/g, '')) || 0,
-      confidence: 'likely',
+      // 時期が空欄なら、まだ起きるかどうかも決まっていない話。検討中として置いておく
+      confidence: targetMonth ? 'likely' : 'considering',
       repeat: null,
       fundedFrom: 'bonus',
     }).catch((e) => console.error('[event:add]', e))
@@ -59,7 +60,7 @@ export const EventsScreen = ({
       </div>
 
       <section className="card dark" style={{ borderRadius: 18, padding: '18px 20px' }}>
-        <div className="label">今年、先に取り分けられる額（ボーナス）</div>
+        <div className="label">今年のボーナスの行き先</div>
         <div className="big">
           <span className="num" style={{ fontSize: 34 }}>
             {num(plan.annual)}

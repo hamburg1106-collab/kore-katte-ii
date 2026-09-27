@@ -6,7 +6,7 @@ import { HomeScreen } from './components/HomeScreen'
 import { InputScreen } from './components/InputScreen'
 import { SettingsScreen } from './components/SettingsScreen'
 import { TabBar, type Tab } from './components/TabBar'
-import { APP_NAME, SCENARIO_KEY, TAB_KEY } from './config'
+import { APP_NAME, TAB_KEY } from './config'
 import { login, logout, watchUser } from './lib/auth'
 import { buildBonusPlan, carryOverAt, cashBalance, monthlyBudget } from './lib/calc'
 import { thisMonth } from './lib/date'
@@ -33,7 +33,6 @@ const App = () => {
   const [user, setUser] = useState<User | null>(null)
   const [ready, setReady] = useState(false)
   const [tab, setTab] = useState<Tab>(() => (localStorage.getItem(TAB_KEY) as Tab) || 'home')
-  const [secondChild, setSecondChild] = useState(() => localStorage.getItem(SCENARIO_KEY) === '1')
 
   useEffect(
     () =>
@@ -45,7 +44,6 @@ const App = () => {
   )
 
   useEffect(() => localStorage.setItem(TAB_KEY, tab), [tab])
-  useEffect(() => localStorage.setItem(SCENARIO_KEY, secondChild ? '1' : '0'), [secondChild])
 
   const uid = user?.uid ?? null
   const data = useData(uid)
@@ -89,9 +87,8 @@ const App = () => {
         month,
         carryOver,
         plan,
-        secondChild,
       ),
-    [data.profile, data.fixed, data.events, data.txns, month, carryOver, plan, secondChild],
+    [data.profile, data.fixed, data.events, data.txns, month, carryOver, plan],
   )
 
   if (!ready) {
@@ -145,9 +142,6 @@ const App = () => {
           assets={data.assets}
           txns={data.txns}
           cardRules={data.cardRules}
-          secondChild={secondChild}
-          scenarioLabel={data.profile.scenarioLabel}
-          onScenario={setSecondChild}
           onSaveTxn={(id, patch) => updateTxn(user.uid, id, patch)}
           onRemoveTxn={(id) => removeTxn(user.uid, id)}
         />
