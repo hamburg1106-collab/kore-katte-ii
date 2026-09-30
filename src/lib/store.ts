@@ -12,7 +12,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { DEFAULT_CARD_RULES, DEFAULT_PROFILE, type CardRule } from '../config'
 import type { Asset, FixedCost, LifeEvent, MonthState, Profile, Reconcile, Txn } from '../types'
-import { monthsBetween, payoutDateFor, thisMonth } from './date'
+import { monthOf, monthsBetween, payoutDateFor, thisMonth } from './date'
 import { db } from './firebase'
 import type { Seed } from './seed'
 
@@ -97,9 +97,39 @@ export const importSeed = async (uid: string, seed: Seed): Promise<void> => {
 }
 
 /**
- * 未計上の月があれば固定費を計上する。
+ * 固定費の記録のID。「月＋固定費」で決まる。
  *
- * months/<YYYY-MM> に印を付けることで、起動するたびに二重計上されるのを防ぐ。
+ * 以前はランダムなIDで書いていたため、計上処理が2回走ると2件ずつ入った。
+ * 起動直後のFirestoreは同じデータを「手元のキャッシュ→サーバー」の順に2回届けるので、
+ * その隙間で「まだ未計上」と2回判断されうる。複数の端末で同時に開いても同じことが起きる。
+ * IDを固定すれば、何回書いても同じ1件が上書きされるだけになる。
+ * （2026-10-01に、10月の固定費が二重に入って予算が −20万円になった）
+ */
+const fixedTxnId = (month: string, fixedId: string) => `fixed_${month}_${fixedId}`
+
+/**
+ * 同じ月に同じ固定費が2件以上あれば、古いものを1件だけ残して消す。
+ *
+ * ランダムIDの時代に二重計上された分を片づけるためのもの。IDを固定した後は
+ * 新たに重複は生まれないが、残っている分は自分では消えないので起動のたびに見る。
+ * 固定費の記録は画面から編集できないので、名前・金額・手段が揃っていれば同じものとみなしてよい。
+ */
+const findDuplicateFixed = (txns: Txn[]): Txn[] => {
+  const seen = new Set<string>()
+  const dupes: Txn[] = []
+  const fixedOnly = txns.filter((t) => t.source === 'fixed').sort((a, b) => a.createdAt - b.createdAt)
+  for (const t of fixedOnly) {
+    const key = `${monthOf(t.date)}|${t.memo}|${t.amount}|${t.method}`
+    if (seen.has(key)) dupes.push(t)
+    else seen.add(key)
+  }
+  return dupes
+}
+
+/**
+ * 未計上の月があれば固定費を計上する。二重に入っている月があれば1件に戻す。
+ *
+ * months/<YYYY-MM> の印と、記録のIDの固定の二段構えで二重計上を防ぐ。
  * 毎月金額が変わるもの（variable）はテンプレの金額で仮置きし、設定画面から直す。
  */
 export const postFixedCosts = async (
@@ -110,21 +140,26 @@ export const postFixedCosts = async (
   txns: Txn[],
   cardRules: Record<'rakuten' | 'view', CardRule>,
 ): Promise<void> => {
+  const batch = writeBatch(db)
+  let dirty = false
+
+  for (const t of findDuplicateFixed(txns)) {
+    batch.delete(doc(db, 'shikin', uid, 'txns', t.id))
+    dirty = true
+  }
+
   const done = new Set(months.filter((m) => m.fixedPosted).map((m) => m.id))
   // 保険。印が消えていても、その月に計上済みの記録があれば手を出さない
-  for (const t of txns) if (t.source === 'fixed') done.add(t.date.slice(0, 7))
+  for (const t of txns) if (t.source === 'fixed') done.add(monthOf(t.date))
 
   const targets = monthsBetween(profile.startMonth, thisMonth()).filter((m) => !done.has(m))
-  if (targets.length === 0) return
-
   const active = fixed.filter((f) => f.active)
-  const batch = writeBatch(db)
 
   for (const month of targets) {
     // 固定費は月初に落ちるものとして1日で計上する
     const date = `${month}-01`
     for (const f of active) {
-      batch.set(doc(sub(uid, 'txns')), {
+      batch.set(doc(db, 'shikin', uid, 'txns', fixedTxnId(month, f.id)), {
         date,
         amount: f.amount,
         memo: f.name,
@@ -136,8 +171,10 @@ export const postFixedCosts = async (
       })
     }
     batch.set(doc(db, 'shikin', uid, 'months', month), { carryOver: 0, fixedPosted: true })
+    dirty = true
   }
-  await batch.commit()
+
+  if (dirty) await batch.commit()
 }
 
 const withIds = <T>(docs: { id: string; data: () => unknown }[]): T[] =>
