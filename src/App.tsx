@@ -2,14 +2,15 @@ import type { User } from 'firebase/auth'
 import { useEffect, useMemo, useState } from 'react'
 import { AssetsScreen } from './components/AssetsScreen'
 import { EventsScreen } from './components/EventsScreen'
+import { HistoryScreen } from './components/HistoryScreen'
 import { HomeScreen } from './components/HomeScreen'
 import { InputScreen } from './components/InputScreen'
 import { SettingsScreen } from './components/SettingsScreen'
 import { TabBar, type Tab } from './components/TabBar'
 import { APP_NAME, TAB_KEY } from './config'
 import { login, logout, watchUser } from './lib/auth'
-import { buildBonusPlan, carryOverAt, cashBalance, monthlyBudget } from './lib/calc'
-import { thisMonth } from './lib/date'
+import { buildBonusPlan, carryOverAt, cashBalance, dailyPace, monthlyBudget } from './lib/calc'
+import { thisMonth, todayKey } from './lib/date'
 import { buildSeed, parseSeed } from './lib/seed'
 import {
   addAsset,
@@ -91,6 +92,9 @@ const App = () => {
     [data.profile, data.fixed, data.events, data.txns, month, carryOver, plan],
   )
 
+  const today = todayKey()
+  const pace = useMemo(() => dailyPace(budget, data.txns, month, today), [budget, data.txns, month, today])
+
   if (!ready) {
     return (
       <div className="app">
@@ -139,16 +143,34 @@ const App = () => {
         <HomeScreen
           month={month}
           budget={budget}
+          pace={pace}
           assets={data.assets}
           txns={data.txns}
           cardRules={data.cardRules}
           onSaveTxn={(id, patch) => updateTxn(user.uid, id, patch)}
           onRemoveTxn={(id) => removeTxn(user.uid, id)}
+          onShowAll={() => setTab('history')}
         />
       )}
 
       {tab === 'input' && (
-        <InputScreen cardRules={data.cardRules} onSave={(t) => addTxn(user.uid, t)} />
+        <InputScreen
+          cardRules={data.cardRules}
+          txns={data.txns}
+          todayLeft={budget.remaining < 0 ? null : pace.todayLeft}
+          onSave={(t) => addTxn(user.uid, t)}
+          onUndo={(id) => removeTxn(user.uid, id)}
+        />
+      )}
+
+      {tab === 'history' && (
+        <HistoryScreen
+          txns={data.txns}
+          startMonth={data.profile.startMonth}
+          cardRules={data.cardRules}
+          onSaveTxn={(id, patch) => updateTxn(user.uid, id, patch)}
+          onRemoveTxn={(id) => removeTxn(user.uid, id)}
+        />
       )}
 
       {tab === 'assets' && (

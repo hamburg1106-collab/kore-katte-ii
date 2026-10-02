@@ -1,7 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { METHODS, type CardRule } from '../config'
-import { formatDayJa, num, payoutDateFor, todayKey } from '../lib/date'
+import { formatDayJa, formatShortDay, num, payoutDateFor, todayKey, yen } from '../lib/date'
+import { memoSuggestions, quickPicks, type QuickPick } from '../lib/memo'
 import type { Method, Txn } from '../types'
+
+const methodLabel = (id: Method) => METHODS.find((m) => m.id === id)?.label ?? id
+
+/** 保存したことの知らせを出しておく時間。取り消しの猶予でもある */
+const TOAST_MS = 8000
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', '←']
 
@@ -14,10 +20,17 @@ const payoutText = (method: Method, date: string, rules: Record<'rakuten' | 'vie
 
 export const InputScreen = ({
   cardRules,
+  txns,
+  todayLeft,
   onSave,
+  onUndo,
 }: {
   cardRules: Record<'rakuten' | 'view', CardRule>
-  onSave: (t: Omit<Txn, 'id'>) => Promise<void>
+  txns: Txn[]
+  /** 今日あと使える額。予算をこえている月は null */
+  todayLeft: number | null
+  onSave: (t: Omit<Txn, 'id'>) => { id: string; written: Promise<void> }
+  onUndo: (id: string) => Promise<void>
 }) => {
   const today = todayKey()
   const [digits, setDigits] = useState('')
@@ -26,6 +39,16 @@ export const InputScreen = ({
   const [date, setDate] = useState(today)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [last, setLast] = useState<{ id: string; text: string } | null>(null)
+
+  const picks = useMemo(() => quickPicks(txns, today), [txns, today])
+  const suggestions = useMemo(() => memoSuggestions(txns), [txns])
+
+  useEffect(() => {
+    if (!last) return
+    const timer = setTimeout(() => setLast(null), TOAST_MS)
+    return () => clearTimeout(timer)
+  }, [last])
 
   const amount = digits === '' ? 0 : parseInt(digits, 10)
 
@@ -45,26 +68,47 @@ export const InputScreen = ({
    * 「保存中…」から戻らず、次の記録も入れられなくなる。実際にはその場で手元
    * （IndexedDB）に入っていて、電波が戻れば自動で送られる。だから画面は先に進める。
    */
-  const save = () => {
-    if (amount <= 0 || !date) return
+  const write = (value: number, text: string, how: Method) => {
     setError(null)
-    void onSave({
+    const { id, written } = onSave({
       date,
-      amount,
-      memo: memo.trim(),
-      method,
-      payoutDate: payoutDateFor(method, date, cardRules),
+      amount: value,
+      memo: text,
+      method: how,
+      payoutDate: payoutDateFor(how, date, cardRules),
       // 手入力は消費として扱う。投資や貯蓄への振替は設定の固定費で持つ
       kind: 'expense',
       source: 'manual',
       createdAt: Date.now(),
-    }).catch((e) => {
+    })
+    written.catch((e) => {
       console.error('[txn:add]', e)
       setError('保存できませんでした。もう一度押してください。')
     })
+    const when = date === today ? '' : `${formatShortDay(date)}に `
+    setLast({ id, text: `${when}${text || 'メモなし'} ${yen(value)}を記録しました` })
+  }
+
+  const save = () => {
+    if (amount <= 0 || !date) return
+    write(amount, memo.trim(), method)
     setDigits('')
     setMemo('')
     setDone(true)
+  }
+
+  /** よく使う組み合わせを1タップで記録する。押し間違いは直後の「取り消す」で戻せる */
+  const quick = (p: QuickPick) => {
+    if (!date) return
+    write(p.amount, p.memo, p.method)
+    setDone(false)
+  }
+
+  const undo = () => {
+    if (!last) return
+    void onUndo(last.id).catch((e) => console.error('[txn:undo]', e))
+    setLast(null)
+    setDone(false)
   }
 
   return (
@@ -84,6 +128,29 @@ export const InputScreen = ({
           />
         </label>
       </div>
+
+      {picks.length > 0 && (
+        <section style={{ margin: '0 16px 12px' }}>
+          <div className="label" style={{ marginBottom: 8 }}>
+            よく使う（押すとすぐ記録）
+          </div>
+          <div className="quick">
+            {picks.map((p) => (
+              <button
+                key={`${p.memo}|${p.amount}`}
+                type="button"
+                aria-label={`${p.memo} ${p.amount}円を${methodLabel(p.method)}で記録する`}
+                onClick={() => quick(p)}
+              >
+                <span className="quick-memo">{p.memo}</span>
+                <span className="quick-sub">
+                  <span className="num">{yen(p.amount)}</span>・{methodLabel(p.method)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="card" style={{ borderRadius: 18, padding: '18px 20px 16px' }}>
         <div
@@ -106,8 +173,16 @@ export const InputScreen = ({
             type="text"
             value={memo}
             placeholder="ラーメン"
+            list="memo-suggestions"
+            autoComplete="off"
             onChange={(e) => setMemo(e.target.value)}
           />
+          {/* 前と同じ言葉を選べるようにする。表記がそろうほどメモ別の集計が正確になる */}
+          <datalist id="memo-suggestions">
+            {suggestions.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
         </div>
       </section>
 
@@ -149,6 +224,23 @@ export const InputScreen = ({
       </section>
 
       <div style={{ flexGrow: 1 }} />
+
+      {/* 浮かせると保存ボタンを隠して次の記録が入れられないので、流れの中に置く */}
+      {last && (
+        <div className="toast" role="status">
+          <div style={{ flexGrow: 1, minWidth: 0 }}>
+            <div>{last.text}</div>
+            {todayLeft !== null && (
+              <div className="toast-sub">
+                {todayLeft >= 0 ? `今日あと ${yen(todayLeft)}` : `今日の1日分を ${yen(-todayLeft)} こえています`}
+              </div>
+            )}
+          </div>
+          <button type="button" onClick={undo}>
+            取り消す
+          </button>
+        </div>
+      )}
 
       <section style={{ margin: '0 16px 12px' }}>
         <div className="pad">

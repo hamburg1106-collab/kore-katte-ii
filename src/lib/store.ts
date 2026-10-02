@@ -261,8 +261,14 @@ export const useData = (uid: string | null): Data => {
   )
 }
 
-export const addTxn = (uid: string, t: Omit<Txn, 'id'>): Promise<void> =>
-  setDoc(doc(sub(uid, 'txns')), t)
+/**
+ * 記録を1件足す。IDはその場で決まるので先に返す。
+ * 1タップ入力の「取り消す」で使う。書き込みの完了（written）は待たなくてよい。
+ */
+export const addTxn = (uid: string, t: Omit<Txn, 'id'>): { id: string; written: Promise<void> } => {
+  const ref = doc(sub(uid, 'txns'))
+  return { id: ref.id, written: setDoc(ref, t) }
+}
 
 export const updateTxn = (uid: string, id: string, patch: Partial<Txn>): Promise<void> =>
   updateDoc(doc(db, 'shikin', uid, 'txns', id), patch)

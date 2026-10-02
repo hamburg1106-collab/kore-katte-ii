@@ -525,3 +525,120 @@ input[type='date'] {
   color: var(--muted);
   line-height: 1.7;
 }
+
+/* ---- 1タップ入力 ---- */
+
+.quick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.quick > button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 1px solid var(--green-light);
+  border-radius: 12px;
+  background: var(--card);
+  text-align: left;
+}
+
+.quick > button:active {
+  background: var(--chip);
+}
+
+.quick-memo {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quick-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* 保存の知らせ。取り消しの猶予を兼ねる */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 10px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 12px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.toast-sub {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.toast > button {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 9px;
+  background: none;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ---- 記録の一覧 ---- */
+
+.month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 8px 8px;
+}
+
+.month-nav .tap {
+  font-size: 24px;
+  color: var(--green);
+}
+
+.month-nav .tap:disabled {
+  color: var(--line);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 12.5px;
+  color: var(--sub);
+}
+
+.check > input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green);
+}
+
+.txn-row.fixed {
+  color: var(--muted);
+  background: var(--line-soft);
+}
+
+.memo-row {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+}

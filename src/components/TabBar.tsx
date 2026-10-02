@@ -1,4 +1,4 @@
-export type Tab = 'home' | 'input' | 'assets' | 'events' | 'settings'
+export type Tab = 'home' | 'input' | 'history' | 'assets' | 'events' | 'settings'
 
 const ICONS: Record<Tab, React.ReactNode> = {
   home: (
@@ -13,6 +13,7 @@ const ICONS: Record<Tab, React.ReactNode> = {
       <path d="M12 8v8M8 12h8" />
     </>
   ),
+  history: <path d="M8 6h12M8 12h12M8 18h12M3.5 6h.01M3.5 12h.01M3.5 18h.01" />,
   assets: <path d="M4 20V11M10 20V5M16 20v-6M22 20H2" />,
   events: (
     <>
@@ -31,12 +32,13 @@ const ICONS: Record<Tab, React.ReactNode> = {
 const LABELS: Record<Tab, string> = {
   home: 'ホーム',
   input: '入力',
+  history: '記録',
   assets: '資産',
   events: '予定',
   settings: '設定',
 }
 
-const ORDER: Tab[] = ['home', 'input', 'assets', 'events', 'settings']
+const ORDER: Tab[] = ['home', 'input', 'history', 'assets', 'events', 'settings']
 
 export const TabBar = ({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) => (
   <nav className="tabs">

@@ -131,3 +131,11 @@ export const payoutDateFor = (
 
   return toDateKey(new Date(payMonth.getFullYear(), payMonth.getMonth(), payDay))
 }
+
+const WEEK = ['日', '月', '火', '水', '木', '金', '土']
+
+/** 「10/2（金）」。記録の一覧の日付見出しに使う */
+export const formatDayWeek = (dateKey: string): string => {
+  const [y, m, d] = dateKey.split('-').map(Number)
+  return `${m}/${d}（${WEEK[new Date(y, m - 1, d).getDay()]}）`
+}

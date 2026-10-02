@@ -205,3 +205,44 @@ export const pendingCardTotal = (txns: Txn[]): number => {
  */
 export const realBalance = (assets: Asset[], txns: Txn[]): number =>
   cashBalance(assets) - pendingCardTotal(txns)
+
+/** ペース予測を出し始める日。月初の数日は1件の買い物で予測が大きく振れるので出さない */
+export const FORECAST_FROM_DAY = 5
+
+export type Pace = {
+  /** 今日あと使える額。マイナスなら今日の1日分をこえている */
+  todayLeft: number
+  /** 今日の始まり時点での1日あたりの額 */
+  perDay: number
+  /** 今日使った額 */
+  spentToday: number
+  /** 残り日数（今日を含む） */
+  daysLeft: number
+  /** このペースで使い続けたときの月末の残り。予測を出すには早すぎる日は null */
+  forecast: number | null
+}
+
+/**
+ * 今月の残りを1日あたりに割る。
+ *
+ * 「今月あと3万円」より「今日あと1,000円」のほうが、買う瞬間の判断に直結する。
+ * 今日使ったぶんで1日あたりの額が下がると、使うほど目標が逃げていくので、
+ * 1日あたりの額は「今日の始まり時点」の残りから出し、そこから今日の分を引く。
+ */
+export const dailyPace = (budget: Budget, txns: Txn[], month: string, today: string): Pace => {
+  const [y, m, d] = today.split('-').map(Number)
+  const days = new Date(y, m, 0).getDate()
+  const daysLeft = days - d + 1
+
+  const spentToday = txns
+    .filter((t) => t.date === today && t.source !== 'fixed' && monthOf(t.date) === month)
+    .reduce((sum, t) => sum + t.amount, 0)
+
+  const atStartOfDay = budget.remaining + spentToday
+  const perDay = atStartOfDay > 0 ? Math.floor(atStartOfDay / daysLeft) : 0
+
+  // 今日までの実績を日割りして月末まで延ばす。今日はまだ途中だが1日として数える
+  const forecast = d >= FORECAST_FROM_DAY ? Math.round(budget.budget - (budget.used / d) * days) : null
+
+  return { todayLeft: perDay - spentToday, perDay, spentToday, daysLeft, forecast }
+}

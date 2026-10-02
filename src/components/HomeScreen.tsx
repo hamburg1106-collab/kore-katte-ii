@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import type { Budget } from '../lib/calc'
-import { pendingCardTotal, cashBalance } from '../lib/calc'
+import type { Budget, Pace } from '../lib/calc'
+import { FORECAST_FROM_DAY, pendingCardTotal, cashBalance } from '../lib/calc'
 import { daysLeftInMonth, formatMonth, formatShortDay, num, yen } from '../lib/date'
 import type { Asset, Txn } from '../types'
 import { METHODS, type CardRule } from '../config'
@@ -11,19 +11,23 @@ const methodLabel = (id: string) => METHODS.find((m) => m.id === id)?.label ?? i
 export const HomeScreen = ({
   month,
   budget,
+  pace,
   assets,
   txns,
   cardRules,
   onSaveTxn,
   onRemoveTxn,
+  onShowAll,
 }: {
   month: string
   budget: Budget
+  pace: Pace
   assets: Asset[]
   txns: Txn[]
   cardRules: Record<'rakuten' | 'view', CardRule>
   onSaveTxn: (id: string, patch: Partial<Txn>) => Promise<void>
   onRemoveTxn: (id: string) => Promise<void>
+  onShowAll: () => void
 }) => {
   const [editing, setEditing] = useState<string | null>(null)
 
@@ -74,6 +78,32 @@ export const HomeScreen = ({
             予算を {num(Math.abs(budget.remaining))}円 こえています。来月の繰越がその分減ります。
           </p>
         )}
+
+        {/* 買う瞬間の判断は、月の残りより1日の残りのほうが効く */}
+        {!over && (
+          <div className="divide">
+            <div className="row">
+              <span style={{ fontSize: 13, fontWeight: 700 }}>
+                {pace.todayLeft >= 0 ? '今日あと' : '今日は1日分をこえています'}
+              </span>
+              <span className="num" style={{ fontSize: 24, fontWeight: 700 }}>
+                {pace.todayLeft < 0 && '−'}
+                {yen(Math.abs(pace.todayLeft))}
+              </span>
+            </div>
+            <div className="small" style={{ marginTop: 4, lineHeight: 1.6 }}>
+              1日あたり {yen(pace.perDay)}（残り{pace.daysLeft}日で割った額）
+              {pace.spentToday > 0 && `・今日 ${yen(pace.spentToday)} 使用`}
+            </div>
+            <div className="small" style={{ marginTop: 2, lineHeight: 1.6 }}>
+              {pace.forecast === null
+                ? `月末の見込みは${FORECAST_FROM_DAY}日から出ます`
+                : pace.forecast >= 0
+                  ? `このペースだと月末に ${yen(pace.forecast)} 余る見込み`
+                  : `このペースだと月末に ${yen(-pace.forecast)} 足りない見込み`}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="card">
@@ -96,8 +126,11 @@ export const HomeScreen = ({
       </section>
 
       <section style={{ margin: '0 16px' }}>
-        <div className="label" style={{ marginBottom: 9 }}>
-          直近の記録
+        <div className="row" style={{ marginBottom: 9, alignItems: 'center' }}>
+          <span className="label">直近の記録</span>
+          <button type="button" className="ghost" onClick={onShowAll}>
+            すべて見る
+          </button>
         </div>
         {recent.length === 0 ? (
           <p className="small" style={{ margin: 0, lineHeight: 1.7 }}>
