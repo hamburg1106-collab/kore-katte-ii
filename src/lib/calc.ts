@@ -66,10 +66,17 @@ export const buildBonusPlan = (
   const shortfall = emergencyShortfall(profile, assets)
   if (shortfall > 0) allocations.push({ name: '生活防衛費の不足', amount: shortfall })
 
+  // この1年で取り分ける額。期日が1年より先なら月あたり×12、1年以内なら全額。
+  // 一律に×12すると、2ヶ月後の30万円が「年180万円」になって大きく出る。
+  // 同じ名前の予定（月ごとに出る家計への補填など）は1行にまとめる
+  const byName = new Map<string, number>()
   for (const e of events) {
     if (!isFunded(e) || e.fundedFrom !== 'bonus') continue
-    allocations.push({ name: e.name, amount: Math.round(eventMonthly(e, fromMonth) * 12) })
+    const months = monthDiff(fromMonth, e.targetMonth)
+    const thisYear = months <= 12 ? e.amount : eventMonthly(e, fromMonth) * 12
+    byName.set(e.name, (byName.get(e.name) ?? 0) + thisYear)
   }
+  for (const [name, amount] of byName) allocations.push({ name, amount: Math.round(amount) })
 
   const allocated = allocations.reduce((sum, a) => sum + a.amount, 0)
 

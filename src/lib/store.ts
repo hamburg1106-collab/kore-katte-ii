@@ -14,6 +14,7 @@ import { DEFAULT_CARD_RULES, DEFAULT_PROFILE, type CardRule } from '../config'
 import type { Asset, FixedCost, LifeEvent, MonthState, Profile, Reconcile, Txn } from '../types'
 import { monthOf, monthsBetween, payoutDateFor, thisMonth } from './date'
 import { db } from './firebase'
+import type { HhEvent, HhIncomeRecord, HhIncomeSource, HhPlan, HhReceipt, HouseholdData } from './household'
 import type { Seed } from './seed'
 
 /** 保存先。プロジェクトは他のアプリと共用しているので shikin/ で分ける */
@@ -336,4 +337,65 @@ export const reconcile = async (
     updatedAt: Date.now(),
   })
   await batch.commit()
+}
+
+/* ---------- 家計（わが家のお財布）の読み取り ---------- */
+
+/**
+ * 家計アプリのデータを読むだけ。書き込みはしない。
+ *
+ * 同じFirebaseプロジェクトの kakeibo/wagaya/... にある。ルールは夫婦のuidだけに
+ * 読み書きを許しているので、敏さんのアカウントならこちらのアプリからも読める。
+ * 読めない（妻のアカウント・ルール未設定）ときは error を立てて、補填なしで計算する。
+ */
+export type HouseholdState = HouseholdData & { loaded: boolean; error: boolean }
+
+const HH_EMPTY: HouseholdState = {
+  receipts: [],
+  income: [],
+  incomeRecords: [],
+  events: [],
+  plan: null,
+  loaded: false,
+  error: false,
+}
+
+export const useHousehold = (uid: string | null): HouseholdState => {
+  const [state, setState] = useState<HouseholdState>(HH_EMPTY)
+
+  useEffect(() => {
+    if (!uid) return
+    let alive = true
+    const patch = (p: Partial<HouseholdState>) => {
+      if (alive) setState((prev) => ({ ...prev, ...p }))
+    }
+    const fail = (where: string) => (e: unknown) => {
+      console.error(`[household] ${where}`, e)
+      patch({ error: true, loaded: true })
+    }
+    const hh = (name: string) => collection(db, 'kakeibo', 'wagaya', name)
+
+    const unsubs = [
+      onSnapshot(hh('receipts'), (s) => patch({ receipts: withIds<HhReceipt>(s.docs) }), fail('receipts')),
+      onSnapshot(hh('income'), (s) => patch({ income: withIds<HhIncomeSource>(s.docs) }), fail('income')),
+      onSnapshot(hh('incomeRecords'), (s) => patch({ incomeRecords: withIds<HhIncomeRecord>(s.docs) }), fail('incomeRecords')),
+      onSnapshot(
+        hh('events'),
+        // repeat は後から足した項目。古い予定には無いので補う（家計アプリと同じ）
+        (s) => patch({ events: withIds<HhEvent>(s.docs).map((e) => ({ ...e, repeat: e.repeat ?? 'once' })) }),
+        fail('events'),
+      ),
+      onSnapshot(
+        doc(db, 'kakeibo', 'wagaya', 'meta', 'plan'),
+        (s) => patch({ plan: s.exists() ? (s.data() as HhPlan) : null, loaded: true }),
+        fail('plan'),
+      ),
+    ]
+    return () => {
+      alive = false
+      for (const u of unsubs) u()
+    }
+  }, [uid])
+
+  return state
 }

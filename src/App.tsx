@@ -11,6 +11,7 @@ import { APP_NAME, TAB_KEY } from './config'
 import { login, logout, watchUser } from './lib/auth'
 import { buildBonusPlan, carryOverAt, cashBalance, dailyPace, monthlyBudget } from './lib/calc'
 import { thisMonth, todayKey } from './lib/date'
+import { householdOutlook, topUpEvents } from './lib/household'
 import { buildSeed, parseSeed } from './lib/seed'
 import {
   addAsset,
@@ -28,6 +29,7 @@ import {
   saveProfile,
   updateTxn,
   useData,
+  useHousehold,
 } from './lib/store'
 
 const App = () => {
@@ -48,7 +50,12 @@ const App = () => {
 
   const uid = user?.uid ?? null
   const data = useData(uid)
+  const hh = useHousehold(uid)
   const month = thisMonth()
+
+  // 家計の見通しから出した補填。こちらの予定と同じ並びで、ボーナス→NISA→月の予算の順に吸収させる
+  const outlook = useMemo(() => householdOutlook(hh, month), [hh, month])
+  const events = useMemo(() => [...data.events, ...topUpEvents(outlook)], [data.events, outlook])
 
   // 起動時に未計上の月があれば固定費を入れる。二重計上は months/<YYYY-MM> の印で防ぐ。
   // months と txns が届く前に動くと印が見えず丸ごと二重計上するので、両方待つ
@@ -69,13 +76,13 @@ const App = () => {
   ])
 
   const plan = useMemo(
-    () => buildBonusPlan(data.profile, data.events, data.assets, month),
-    [data.profile, data.events, data.assets, month],
+    () => buildBonusPlan(data.profile, events, data.assets, month),
+    [data.profile, events, data.assets, month],
   )
 
   const carryOver = useMemo(
-    () => carryOverAt(data.profile, data.fixed, data.events, data.txns, month, plan),
-    [data.profile, data.fixed, data.events, data.txns, month, plan],
+    () => carryOverAt(data.profile, data.fixed, events, data.txns, month, plan),
+    [data.profile, data.fixed, events, data.txns, month, plan],
   )
 
   const budget = useMemo(
@@ -83,13 +90,13 @@ const App = () => {
       monthlyBudget(
         data.profile,
         data.fixed,
-        data.events,
+        events,
         data.txns,
         month,
         carryOver,
         plan,
       ),
-    [data.profile, data.fixed, data.events, data.txns, month, carryOver, plan],
+    [data.profile, data.fixed, events, data.txns, month, carryOver, plan],
   )
 
   const today = todayKey()
@@ -188,6 +195,7 @@ const App = () => {
         <EventsScreen
           plan={plan}
           events={data.events}
+          household={{ outlook, loaded: hh.loaded, error: hh.error }}
           onSave={(id, patch) => saveEvent(user.uid, id, patch)}
           onAdd={(e) => addEvent(user.uid, e)}
           onRemove={(id) => removeEvent(user.uid, id)}
